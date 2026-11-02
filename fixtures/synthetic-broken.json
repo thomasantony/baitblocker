@@ -1,0 +1,6 @@
+{"data":{"home":{"home_timeline_urt":{"instructions":[{"entries":[
+ {"content":{"itemContent":{"tweet_results":{"result":{"__typename":"Tweet","rest_id":"400"}}}}},
+ {"content":{"itemContent":{"tweet_results":{"result":{"__typename":"Tweet","rest_id":"401","core":null,"legacy":{"full_txt":"renamed field"},"quoted_status_result":{}}}}}},
+ {"content":{"itemContent":{"tweet_results":{"result":{"__typename":"Tweet","legacy":{"full_text":"no id"}}}}}},
+ {"content":{"itemContent":{"tweet_results":{"result":{"__typename":"TweetTombstone"}}}}}
+]}]}}}}

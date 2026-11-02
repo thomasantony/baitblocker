@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "questions": [
+    { "id": "outgroup_contempt", "text": "Does this post portray a group of people (by race, nationality, religion, politics, or gender) as contemptible, subhuman, or a threat?" },
+    { "id": "slurs", "text": "Does this post contain slurs or dehumanizing language about a group?" },
+    { "id": "provocation", "text": "Is this post engineered to provoke angry replies or quote-posts, such as a deliberately inflammatory or wrong take?" },
+    { "id": "fabricated", "text": "Does this post make an inflammatory claim that is unsourced, unfalsifiable, or likely fabricated?" },
+    { "id": "engagement_bait", "text": "Is this a culture-war engagement prompt (\"who agrees?\", \"thoughts?\", polls about groups) rather than information or genuine discussion?" }
+  ],
+  "combine": {
+    "max_of": ["slurs", "outgroup_contempt"],
+    "weighted": { "provocation": 0.5, "engagement_bait": 0.3, "fabricated": 0.2 }
+  },
+  "thresholds": { "hide": 0.85, "blur": 0.4 }
+}

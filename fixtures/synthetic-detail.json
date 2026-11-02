@@ -1,0 +1,5 @@
+{"data":{"threaded_conversation_with_injections_v2":{"instructions":[{"type":"TimelineAddEntries","entries":[
+ {"entryId":"tweet-200","content":{"itemContent":{"tweet_results":{"result":{"__typename":"Tweet","rest_id":"200","core":{"user_results":{"result":{"core":{"screen_name":"dave"}}}},"legacy":{"full_text":"Look at this take"},"quoted_status_result":{"result":{"__typename":"Tweet","rest_id":"201","core":{"user_results":{"result":{"core":{"screen_name":"erin"}}}},"legacy":{"full_text":"The quoted take"}}}}}}}},
+ {"entryId":"conversationthread-300","content":{"items":[{"item":{"itemContent":{"tweet_results":{"result":{"__typename":"Tweet","rest_id":"300","core":{"user_results":{"result":{"core":{"screen_name":"frank"}}}},"legacy":{"full_text":"@dave a reply","in_reply_to_status_id_str":"200"}}}}}},
+  {"item":{"itemContent":{"tweet_results":{"result":{"__typename":"Tweet","rest_id":"200","legacy":{"full_text":"duplicate of 200"}}}}}}]}}
+]}]}}}

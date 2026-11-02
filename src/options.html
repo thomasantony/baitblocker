@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ragebait Filter</title>
+<style>
+  :root { color-scheme: light dark; --muted: #6b7280; --border: #d1d5db; --ok: #15803d; --err: #b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --muted: #9ca3af; --border: #374151; --ok: #4ade80; --err: #f87171; } }
+  body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 28px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  label { display: block; margin: 8px 0; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  input[type=text], input[type=password], input[type=number], select { padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; font: inherit; background: transparent; color: inherit; }
+  input[type=password] { width: 360px; max-width: 100%; }
+  input[type=number] { width: 110px; }
+  textarea { width: 100%; height: 120px; font: 12px ui-monospace, monospace; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: inherit; box-sizing: border-box; }
+  button { font: inherit; padding: 4px 12px; cursor: pointer; }
+  .muted { color: var(--muted); }
+  .status { margin-left: 8px; }
+  .ok { color: var(--ok); } .err { color: var(--err); }
+  table { border-collapse: collapse; } td { padding: 2px 16px 2px 0; }
+</style>
+</head>
+<body>
+<h1>Ragebait Filter</h1>
+<div class="muted">v0 · scores x.com posts with Liquid AI d1</div>
+
+<h2>d1 API</h2>
+<label>API key <input id="apiKey" type="password" autocomplete="off" placeholder="liquid_…"></label>
+<label>Model <select id="model"><option value="d1.1">d1.1</option><option value="d1-ultra">d1-ultra</option></select></label>
+<label>Daily input-token budget <input id="budget" type="number" min="0" step="10000"></label>
+
+<h2>Thresholds &amp; UI</h2>
+<div class="row">
+  <label>Hide ≥ <input id="tHide" type="number" min="0" max="1" step="0.01"></label>
+  <label>Blur ≥ <input id="tBlur" type="number" min="0" max="1" step="0.01"></label>
+</div>
+<div class="row">
+  <label><input id="enPending" type="checkbox"> Dim unscored</label>
+  <label><input id="enHide" type="checkbox"> Hide</label>
+  <label><input id="enBlur" type="checkbox"> Blur</label>
+  <label><input id="enFlag" type="checkbox"> Flag button on shown posts</label>
+</div>
+<label><input id="capture" type="checkbox"> Capture raw timeline responses for fixtures (debug, last 30 kept)</label>
+<button id="save">Save</button><span id="saveStatus" class="status"></span>
+
+<h2>Seed blocked accounts</h2>
+<p class="muted">Paste JSON <code>[{"handle": "...", "text": "..."}]</code>, or pick a CSV with an <code>account_handle</code> column (<code>description</code> becomes the seed text).</p>
+<textarea id="seedJson" placeholder='[{"handle": "@example", "text": "bio or post"}]'></textarea>
+<div class="row">
+  <button id="importJson">Import JSON</button>
+  <input id="seedCsv" type="file" accept=".csv,text/csv">
+  <span id="seedStatus" class="status"></span>
+</div>
+
+<h2>Export</h2>
+<div class="row">
+  <button id="exportLabels">labels.jsonl</button>
+  <button id="exportAuthors">authors.jsonl</button>
+  <button id="exportCaptures">captured responses</button>
+  <span id="exportStatus" class="status"></span>
+</div>
+
+<h2>Stats</h2>
+<table id="stats"></table>
+<button id="refresh">Refresh</button>
+
+<script src="options.js"></script>
+</body>
+</html>

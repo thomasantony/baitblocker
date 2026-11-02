@@ -1,0 +1,7 @@
+node_modules/
+dist/
+liquid_token.txt
+block_list.csv
+block_list.html
+fixtures/*.json
+!fixtures/synthetic-*.json

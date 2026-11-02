@@ -1,0 +1,6 @@
+{"data":{"home":{"home_timeline_urt":{"instructions":[{"type":"TimelineAddEntries","entries":[
+ {"entryId":"tweet-100","content":{"entryType":"TimelineTimelineItem","itemContent":{"itemType":"TimelineTweet","tweet_results":{"result":{"__typename":"Tweet","rest_id":"100","core":{"user_results":{"result":{"__typename":"User","core":{"screen_name":"alice"},"legacy":{}}}},"legacy":{"full_text":"Plain post from alice"}}}}}},
+ {"entryId":"tweet-101","content":{"entryType":"TimelineTimelineItem","itemContent":{"itemType":"TimelineTweet","tweet_results":{"result":{"__typename":"TweetWithVisibilityResults","tweet":{"__typename":"Tweet","rest_id":"101","core":{"user_results":{"result":{"__typename":"User","legacy":{"screen_name":"bob"}}}},"legacy":{"full_text":"Legacy-handle post from bob"}}}}}}},
+ {"entryId":"tweet-102","content":{"entryType":"TimelineTimelineItem","itemContent":{"itemType":"TimelineTweet","tweet_results":{"result":{"__typename":"Tweet","rest_id":"102","core":{"user_results":{"result":{"core":{"screen_name":"carol"}}}},"note_tweet":{"note_tweet_results":{"result":{"text":"LONG POST full text that goes past 280 characters"}}},"legacy":{"full_text":"LONG POST truncated…"}}}}}},
+ {"entryId":"cursor-bottom","content":{"entryType":"TimelineTimelineCursor","value":"abc"}}
+]}]}}}}

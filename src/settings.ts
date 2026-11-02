@@ -1,0 +1,46 @@
+import questions from '../config/questions.json';
+import type { Decision, QuestionsConfig, Settings, Usage } from './types';
+
+export const QUESTIONS = questions as QuestionsConfig;
+
+export const DEFAULT_SETTINGS: Settings = {
+  apiKey: '',
+  model: 'd1.1',
+  thresholds: { ...QUESTIONS.thresholds },
+  enabled: { pending: true, hide: true, blur: true, flag: true },
+  dailyTokenBudget: 1_000_000,
+  captureFixtures: false,
+};
+
+export async function loadSettings(): Promise<Settings> {
+  const { settings } = await chrome.storage.local.get('settings');
+  const s = (settings ?? {}) as Partial<Settings>;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...s,
+    thresholds: { ...DEFAULT_SETTINGS.thresholds, ...s.thresholds },
+    enabled: { ...DEFAULT_SETTINGS.enabled, ...s.enabled },
+  };
+}
+
+export async function saveSettings(s: Settings): Promise<void> {
+  await chrome.storage.local.set({ settings: s });
+}
+
+export const today = () => new Date().toLocaleDateString('en-CA');
+
+export const emptyUsage = (): Usage => ({ date: today(), tokens: 0, scored: 0, decisions: { hide: 0, blur: 0, show: 0 } });
+
+export async function loadUsage(): Promise<Usage> {
+  const { usage } = await chrome.storage.local.get('usage');
+  const u = usage as Usage | undefined;
+  return u && u.date === today() ? u : emptyUsage();
+}
+
+export async function recordUsage(tokens: number, decision: Decision): Promise<void> {
+  const u = await loadUsage();
+  u.tokens += tokens;
+  u.scored++;
+  u.decisions[decision]++;
+  await chrome.storage.local.set({ usage: u });
+}
