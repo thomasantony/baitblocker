@@ -10,7 +10,12 @@ const fallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let settings: Settings | undefined;
 
 const FALLBACK_DELAY_MS = 400;
-const STRONG = new Set(['slurs', 'outgroup_contempt']);
+/** Questions named in the UI when they are the top reason; everything else shows as "ragebait". */
+const NAMED: Record<string, string> = {
+  slurs: 'slurs',
+  outgroup_contempt: 'outgroup contempt',
+  anticapitalist_slogans: 'anti-capitalist slogans',
+};
 
 // ---------- messaging ----------
 
@@ -144,7 +149,7 @@ function swallow(n: HTMLElement) {
 
 function reasonName(v: Verdict): string {
   if (v.topQuestion === 'seeded_author') return 'seeded account';
-  if (v.topQuestion && STRONG.has(v.topQuestion)) return v.topQuestion.replace('_', ' ');
+  if (v.topQuestion && NAMED[v.topQuestion]) return NAMED[v.topQuestion];
   return 'ragebait';
 }
 
@@ -174,19 +179,21 @@ function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
     );
     article.prepend(bar);
   } else if (state === 'blur' && v) {
-    const ov = swallow(el('div', 'rbf-ui rbf-overlay'));
-    ov.append(el('div', 'rbf-meta', metaText(v)));
-    const row = el('div', 'rbf-row');
+    // Controls sit in their own bar above the post so they never cover the text; hovering the post peeks.
+    const bar = swallow(el('div', 'rbf-ui rbf-bar rbf-blurbar'));
+    bar.append(el('span', 'rbf-meta', `Blurred · ${metaText(v)}`));
     for (const label of ['ragebait', 'racist', 'fine'] as const) {
-      row.append(
+      bar.append(
         button(label, () => {
           sendLabel(id, label, 'user_button');
           reveal(id);
         }),
       );
     }
-    ov.append(row);
-    article.prepend(ov);
+    const show = button('show', () => reveal(id));
+    show.classList.add('rbf-link');
+    bar.append(show);
+    article.prepend(bar);
   } else if (state === 'show' && settings?.enabled.flag !== false) {
     const flag = swallow(el('div', 'rbf-ui rbf-flag'));
     const toggle = button('⚑', () => flag.classList.toggle('rbf-open'));
@@ -244,16 +251,15 @@ const CSS = `
 article.rbf-pending { opacity: .5; }
 article.rbf-hide, article.rbf-blur, article.rbf-show { position: relative; }
 article.rbf-hide > :not(.rbf-ui) { display: none !important; }
-article.rbf-blur > :not(.rbf-ui) { filter: blur(12px); pointer-events: none; user-select: none; }
+article.rbf-blur > :not(.rbf-ui) { filter: blur(12px); pointer-events: none; user-select: none; transition: filter .15s; }
+article.rbf-blur:hover > :not(.rbf-ui) { filter: none; transition-delay: .4s; }
 .rbf-ui { font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: rgb(113,118,123); }
 .rbf-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
 .rbf-bar .rbf-meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rbf-overlay { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-.rbf-overlay .rbf-meta { background: rgba(0,0,0,.6); color: #e7e9ea; padding: 2px 8px; border-radius: 6px; }
-.rbf-row { display: flex; gap: 8px; }
 .rbf-btn { font: inherit; cursor: pointer; border: 1px solid rgb(83,100,113); background: rgba(0,0,0,.65); color: #e7e9ea; border-radius: 999px; padding: 3px 12px; }
 .rbf-btn:hover { background: rgba(29,155,240,.85); border-color: transparent; }
-.rbf-bar .rbf-btn { background: transparent; color: rgb(29,155,240); border-color: transparent; padding: 0; }
+.rbf-blurbar .rbf-btn { padding: 1px 10px; }
+.rbf-bar:not(.rbf-blurbar) .rbf-btn, .rbf-bar .rbf-btn.rbf-link { background: transparent; color: rgb(29,155,240); border-color: transparent; padding: 0 0 0 4px; }
 .rbf-flag { position: absolute; top: 10px; right: 52px; z-index: 2; display: flex; gap: 4px; opacity: 0; transition: opacity .1s; }
 article:hover > .rbf-flag, .rbf-flag.rbf-open, .rbf-flag.rbf-done { opacity: 1; }
 .rbf-flag > .rbf-btn { padding: 0 6px; }

@@ -1,15 +1,45 @@
 {
-  "version": 1,
+  "version": 3,
   "questions": [
-    { "id": "outgroup_contempt", "text": "Does this post portray a group of people (by race, nationality, religion, politics, or gender) as contemptible, subhuman, or a threat?" },
-    { "id": "slurs", "text": "Does this post contain slurs or dehumanizing language about a group?" },
-    { "id": "provocation", "text": "Is this post engineered to provoke angry replies or quote-posts, such as a deliberately inflammatory or wrong take?" },
-    { "id": "fabricated", "text": "Does this post make an inflammatory claim that is unsourced, unfalsifiable, or likely fabricated?" },
-    { "id": "engagement_bait", "text": "Is this a culture-war engagement prompt (\"who agrees?\", \"thoughts?\", polls about groups) rather than information or genuine discussion?" }
+    {
+      "id": "outgroup_contempt",
+      "text": "Does this post portray a group of people (by race, nationality, religion, politics, or gender) as contemptible, subhuman, or a threat?"
+    },
+    {
+      "id": "slurs",
+      "text": "Does this post contain slurs or dehumanizing language about a group?"
+    },
+    {
+      "id": "provocation",
+      "text": "Is this post deliberately engineered to provoke angry replies or quote-posts: a take the author likely does not sincerely hold, or one that gratuitously insults the people who will disagree? Answer no for sincere opinions, jokes, or criticism made without insults."
+    },
+    {
+      "id": "fabricated",
+      "text": "Does this post assert a specific factual claim (an event, statistic, or quote) that is inflammatory and is unsourced, unfalsifiable, or likely fabricated? Answer no if the post makes no factual claim, for example opinions, jokes, reactions, or emoji."
+    },
+    {
+      "id": "engagement_bait",
+      "text": "Does this post explicitly ask readers to react on a culture-war topic, for example \"who agrees?\", \"thoughts?\", \"RT if...\", or a poll pitting groups against each other? Answer no if it does not directly ask readers to respond."
+    },
+    {
+      "id": "anticapitalist_slogans",
+      "text": "Does the author of this post themselves voice reflexive anti-capitalist or anti-AI sentiment, such as \"billionaires are evil\", \"every billionaire is a policy failure\", \"AI is theft\", \"using AI means you are not an artist\", \"eat the rich\", or treating ordinary work and markets as oppression (\"capitalism is when I have to work\"), as a slogan rather than a specific, substantive argument? Answer no if the post mocks, criticizes, or argues against such views."
+    }
   ],
   "combine": {
-    "max_of": ["slurs", "outgroup_contempt"],
-    "weighted": { "provocation": 0.5, "engagement_bait": 0.3, "fabricated": 0.2 }
+    "max_of": [
+      "slurs",
+      "outgroup_contempt",
+      "anticapitalist_slogans"
+    ],
+    "weighted": {
+      "provocation": 0.5,
+      "engagement_bait": 0.3,
+      "fabricated": 0.2
+    }
   },
-  "thresholds": { "hide": 0.85, "blur": 0.4 }
+  "thresholds": {
+    "hide": 0.85,
+    "blur": 0.4
+  }
 }

@@ -11,3 +11,5 @@ npm test
 Load: `chrome://extensions` → Developer mode → Load unpacked → `dist/`. Click the toolbar icon for settings (API key, thresholds, seed import, export).
 
 Fixtures: enable "Capture raw timeline responses" in settings, browse x.com, then export "captured responses" and save pieces into `fixtures/` (gitignored except `synthetic-*`).
+
+Eval: export labels from settings, then `npm run eval -- ~/Downloads/labels.jsonl [config.json] [--verbose]` to see how a questions config decides on your labeled posts (d1 answers cached in `.eval-cache.json`).

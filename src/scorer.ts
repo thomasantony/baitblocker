@@ -24,6 +24,8 @@ export interface ScorerOptions {
 
 interface Job {
   post: Post;
+  /** True when re-scoring a post cached under older questions; the author was already counted. */
+  rescore: boolean;
   resolve: (v: Verdict) => void;
 }
 
@@ -51,7 +53,10 @@ export class Scorer {
 
   private async decideUncached(post: Post): Promise<Verdict> {
     const cached = await this.o.store.getPost(post.id);
-    if (cached) return this.verdictFor(cached, 'cache');
+    // Seeded decisions don't depend on the questions; d1 scores do, so re-score when the question set changed.
+    if (cached && (cached.reason === 'seeded' || cached.questionsVersion === this.o.config.version)) {
+      return this.verdictFor(cached, 'cache');
+    }
 
     const seededBy = await this.seededAuthor(post);
     if (seededBy) {
@@ -70,7 +75,7 @@ export class Scorer {
 
     if (!this.o.client()) return { postId: post.id, decision: 'unscored', reason: 'no_key' };
     return new Promise<Verdict>((resolve) => {
-      this.queue.push({ post, resolve });
+      this.queue.push({ post, rescore: !!cached, resolve });
       if (this.queue.length >= this.concurrency) this.flush();
       else this.timer ??= setTimeout(() => this.flush(), this.flushMs);
     });
@@ -82,7 +87,7 @@ export class Scorer {
     while (this.active < this.concurrency && this.queue.length) {
       const job = this.queue.shift()!;
       this.active++;
-      this.run(job.post)
+      this.run(job.post, job.rescore)
         .catch((): Verdict => ({ postId: job.post.id, decision: 'unscored', reason: 'error' }))
         .then(job.resolve)
         .finally(() => {
@@ -92,7 +97,7 @@ export class Scorer {
     }
   }
 
-  private async run(post: Post): Promise<Verdict> {
+  private async run(post: Post, rescore: boolean): Promise<Verdict> {
     const client = this.o.client();
     if (!client) return { postId: post.id, decision: 'unscored', reason: 'no_key' };
     if (!(await this.o.budget.canSpend())) return { postId: post.id, decision: 'unscored', reason: 'budget' };
@@ -101,7 +106,7 @@ export class Scorer {
     const rec: PostRecord = { ...this.baseRecord(post), probs, score: c.score, decision: c.decision, reason: 'd1' };
     await this.o.store.putPost(rec);
     await this.o.budget.record(inputTokens, c.decision);
-    await this.bumpAuthor(post.author, c.score);
+    if (!rescore) await this.bumpAuthor(post.author, c.score);
     return this.verdictFor(rec, 'd1');
   }
 

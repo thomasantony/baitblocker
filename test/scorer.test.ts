@@ -49,7 +49,7 @@ describe('Scorer', () => {
     const { scorer, store, budget } = setup();
     const v = await scorer.decide(post('1'));
     expect(v).toMatchObject({ decision: 'hide', reason: 'd1', topQuestion: 'slurs', author: 'someone' });
-    expect(store.posts.get('1')).toMatchObject({ decision: 'hide', probs: { slurs: 0.95 }, questionsVersion: 1 });
+    expect(store.posts.get('1')).toMatchObject({ decision: 'hide', probs: { slurs: 0.95 }, questionsVersion: QUESTIONS.version });
     expect(store.authors.get('someone')).toMatchObject({ alpha: 1.95, postsSeen: 1 });
     expect(store.authors.get('someone')!.beta).toBeCloseTo(1.05);
     expect(budget.record).toHaveBeenCalledWith(100, 'hide');
@@ -60,6 +60,16 @@ describe('Scorer', () => {
     await Promise.all([scorer.decide(post('1')), scorer.decide(post('1'))]);
     expect(await scorer.decide(post('1'))).toMatchObject({ reason: 'cache', decision: 'hide' });
     expect(client.score).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-scores posts cached under an older question set without re-counting the author', async () => {
+    const { scorer, client, store } = setup();
+    await scorer.decide(post('1'));
+    store.posts.get('1')!.questionsVersion = QUESTIONS.version - 1;
+    expect(await scorer.decide(post('1'))).toMatchObject({ reason: 'd1' });
+    expect(client.score).toHaveBeenCalledTimes(2);
+    expect(store.posts.get('1')!.questionsVersion).toBe(QUESTIONS.version);
+    expect(store.authors.get('someone')).toMatchObject({ postsSeen: 1, alpha: 1.95 });
   });
 
   it('limits requests in flight to the batch size', async () => {
@@ -104,7 +114,7 @@ describe('D1Client', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer liquid_test');
     const body = JSON.parse(init.body as string);
     expect(body.state).toBe('post 1\n\n[Quoting @x]\nq');
-    expect(Object.keys(body.questions)).toHaveLength(5);
+    expect(Object.keys(body.questions)).toHaveLength(QUESTIONS.questions.length);
     expect(body.questions.slurs.type).toBe('noul');
   });
 });

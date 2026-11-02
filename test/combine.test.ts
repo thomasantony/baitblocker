@@ -11,6 +11,10 @@ describe('combine', () => {
     expect(combineScore({ outgroup_contempt: 0.2, provocation: 0.8, engagement_bait: 0.5, fabricated: 0.5 }, QUESTIONS.combine)).toBeCloseTo(0.65);
   });
 
+  it('lets anti-capitalist sloganeering decide on its own', () => {
+    expect(combine({ anticapitalist_slogans: 0.99, provocation: 0.2 }, QUESTIONS, t)).toMatchObject({ decision: 'hide', topQuestion: 'anticapitalist_slogans' });
+  });
+
   it('treats missing probabilities as 0', () => {
     expect(combineScore({}, QUESTIONS.combine)).toBe(0);
   });
