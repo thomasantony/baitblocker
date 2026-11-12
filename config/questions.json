@@ -1,9 +1,9 @@
 {
-  "version": 8,
+  "version": 9,
   "questions": [
     {
       "id": "us_politics",
-      "text": "Is this post (including any text in attached images) about United States politics, economics, or culture war, written as if the author lives in the US? Examples: Democrats or Republicans, US politicians, the minimum wage or prices in dollars, rent or wages in US cities, US healthcare or insurance, taxes, student loans, guns, immigration, or 'in this country' complaints about America. Answer no for posts that are not about the US, and for neutral news reports."
+      "text": "Is this post (including any text in attached images) about United States politics, public policy, or culture war, written as if the author lives in the US? Examples: Democrats or Republicans, US politicians, the minimum wage, prices, rent, or wages in dollars or in US cities, the cost of living, US healthcare or insurance, taxes, student loans, guns, immigration, or 'in this country' complaints about America. Answer no for investing, stocks, markets, or opinions about companies and their products, for posts that are not about the US, and for neutral news reports."
     },
     {
       "id": "ideology_bait",
