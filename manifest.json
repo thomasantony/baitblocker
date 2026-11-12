@@ -3,7 +3,7 @@
   "name": "BaitBlocker",
   "version": "0.1.0",
   "description": "Hides US-politics and ideology bait from accounts based outside the US.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "scripting"],
   "host_permissions": ["https://x.com/*", "https://api.liquid.ai/*", "https://pbs.twimg.com/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "BaitBlocker settings" },

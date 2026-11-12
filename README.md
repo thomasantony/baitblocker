@@ -40,7 +40,7 @@ npm install
 npm run build
 ```
 
-Then click the reload icon on the extension's card in `chrome://extensions` and reload any open x.com tabs.
+Then click the reload icon on the extension's card in `chrome://extensions`. Open x.com tabs pick up the new version automatically; if one doesn't, reload it.
 
 ### Uninstalling
 
@@ -51,6 +51,7 @@ Click **Remove** on the extension's card in `chrome://extensions`. That deletes 
 - `x.com`: reads the timeline data X already sends your browser, and looks up authors' "Account based in" with your session (the same request X's "About this account" page makes).
 - `api.liquid.ai`: post text and attached photos are sent to Liquid AI's d1 API for scoring, with your API key.
 - `pbs.twimg.com`: downloads attached photos so they can be sent to d1.
+- `scripting`: after an install or update, injects the extension into x.com tabs that were already open, so they work without a reload.
 - `storage`: settings, your API key, and caches stay in the browser. Nothing else leaves it, and the extension never posts, likes, mutes or blocks on X.
 
 ## Settings

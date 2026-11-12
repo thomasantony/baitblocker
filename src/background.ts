@@ -89,3 +89,19 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
 });
 
 chrome.action?.onClicked.addListener(() => chrome.runtime.openOptionsPage());
+
+// Chrome does not inject content scripts into tabs that were open before an install or update, and the
+// copies already running there are cut off from this worker. Inject fresh copies so open x.com tabs keep
+// working without a reload (the old content script notices it is orphaned and stops).
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== 'install' && reason !== 'update') return;
+  for (const tab of await chrome.tabs.query({ url: 'https://x.com/*' })) {
+    if (tab.id === undefined) continue;
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['inject.js'], world: 'MAIN' });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+    } catch (e) {
+      console.warn('[baitblocker] could not inject into tab', tab.id, e instanceof Error ? e.message : e);
+    }
+  }
+});

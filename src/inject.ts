@@ -34,6 +34,9 @@ function observeRequest(url: string, auth?: string | null) {
   }
 }
 
+// Captured before wrapping, so our own lookups are not observed as X traffic.
+const origFetch = window.fetch;
+
 const fetcher = new CountryFetcher({
   fetch: (...a) => origFetch(...a),
   queryId: () => queryId,
@@ -45,65 +48,74 @@ const fetcher = new CountryFetcher({
   }),
 });
 
-window.addEventListener('message', (e) => {
-  if (e.source !== window || e.data?.ns !== MSG_NS) return;
-  if (e.data.type === 'config') capture = !!e.data.capture;
-  else if (e.data.type === 'lookupCountry' && typeof e.data.handle === 'string') {
-    const handle: string = e.data.handle;
-    fetcher.lookup(handle).then((result) => window.postMessage({ ns: MSG_NS, type: 'countryResult', handle, result }, location.origin));
-  }
-});
-
-function handle(url: string, json: unknown) {
-  try {
-    const posts = parser.parse(json);
-    if (posts.length) window.postMessage({ ns: MSG_NS, type: 'posts', posts }, location.origin);
-    if (capture) window.postMessage({ ns: MSG_NS, type: 'capture', url, body: json }, location.origin);
-  } catch {
-    // never let parsing affect the page
-  }
+// The background re-injects this script into open tabs after an extension update; an earlier copy may
+// already be installed in the page, so install the listeners and fetch/XHR wrappers only once.
+const INSTALLED = '__baitblockerInjected';
+if (!(window as any)[INSTALLED]) {
+  (window as any)[INSTALLED] = true;
+  install();
 }
 
-const origFetch = window.fetch;
-window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>) {
-  const res = await origFetch.apply(this, args);
-  try {
-    const input = args[0];
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const h = args[1]?.headers ?? (input instanceof Request ? input.headers : undefined);
-    observeRequest(url, h instanceof Headers ? h.get('authorization') : Array.isArray(h) ? undefined : (h as any)?.authorization);
-    if (isTimelineUrl(url)) {
-      res
-        .clone()
-        .json()
-        .then((j) => handle(url, j), () => {});
+function install() {
+  window.addEventListener('message', (e) => {
+    if (e.source !== window || e.data?.ns !== MSG_NS) return;
+    if (e.data.type === 'config') capture = !!e.data.capture;
+    else if (e.data.type === 'lookupCountry' && typeof e.data.handle === 'string') {
+      const handle: string = e.data.handle;
+      fetcher.lookup(handle).then((result) => window.postMessage({ ns: MSG_NS, type: 'countryResult', handle, result }, location.origin));
     }
-  } catch {
-    // ignore
-  }
-  return res;
-};
+  });
 
-const origOpen = XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL, ...rest: any[]) {
-  const href = String(url);
-  observeRequest(href);
-  if (isTimelineUrl(href)) {
-    this.addEventListener('load', () => {
-      try {
-        const body =
-          this.responseType === 'json' ? this.response : this.responseType === '' || this.responseType === 'text' ? JSON.parse(this.responseText) : undefined;
-        if (body) handle(href, body);
-      } catch {
-        // ignore
+  function handle(url: string, json: unknown) {
+    try {
+      const posts = parser.parse(json);
+      if (posts.length) window.postMessage({ ns: MSG_NS, type: 'posts', posts }, location.origin);
+      if (capture) window.postMessage({ ns: MSG_NS, type: 'capture', url, body: json }, location.origin);
+    } catch {
+      // never let parsing affect the page
+    }
+  }
+
+  window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>) {
+    const res = await origFetch.apply(this, args);
+    try {
+      const input = args[0];
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const h = args[1]?.headers ?? (input instanceof Request ? input.headers : undefined);
+      observeRequest(url, h instanceof Headers ? h.get('authorization') : Array.isArray(h) ? undefined : (h as any)?.authorization);
+      if (isTimelineUrl(url)) {
+        res
+          .clone()
+          .json()
+          .then((j) => handle(url, j), () => {});
       }
-    });
-  }
-  return (origOpen as any).call(this, method, url, ...rest);
-} as typeof XMLHttpRequest.prototype.open;
+    } catch {
+      // ignore
+    }
+    return res;
+  };
 
-const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
-XMLHttpRequest.prototype.setRequestHeader = function (this: XMLHttpRequest, name: string, value: string) {
-  if (name.toLowerCase() === 'authorization') observeRequest('', value);
-  return origSetHeader.call(this, name, value);
-};
+  const origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL, ...rest: any[]) {
+    const href = String(url);
+    observeRequest(href);
+    if (isTimelineUrl(href)) {
+      this.addEventListener('load', () => {
+        try {
+          const body =
+            this.responseType === 'json' ? this.response : this.responseType === '' || this.responseType === 'text' ? JSON.parse(this.responseText) : undefined;
+          if (body) handle(href, body);
+        } catch {
+          // ignore
+        }
+      });
+    }
+    return (origOpen as any).call(this, method, url, ...rest);
+  } as typeof XMLHttpRequest.prototype.open;
+
+  const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.setRequestHeader = function (this: XMLHttpRequest, name: string, value: string) {
+    if (name.toLowerCase() === 'authorization') observeRequest('', value);
+    return origSetHeader.call(this, name, value);
+  };
+}

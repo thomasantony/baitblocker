@@ -12,6 +12,20 @@ const fallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let settings: Settings | undefined;
 
 const FALLBACK_DELAY_MS = 400;
+
+/**
+ * False once the extension has been reloaded or updated: this copy of the script is then orphaned (Chrome
+ * leaves it running in open tabs, but it can no longer reach the background) and the background has
+ * injected a fresh copy, so this one must stop touching the page.
+ */
+function alive(): boolean {
+  try {
+    return !!chrome.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+let observer: MutationObserver | undefined;
 /** Questions named in the UI when they are the top reason; everything else shows as "ragebait". */
 const NAMED: Record<string, string> = {
   us_politics: 'US-politics bait',
@@ -37,7 +51,9 @@ function requestVerdict(post: Post) {
       schedule();
     })
     .catch(() => {
-      // extension reloaded or worker unavailable: show the post untouched
+      // Orphaned by an extension reload: the fresh copy takes over this post.
+      if (!alive()) return;
+      // worker unavailable: show the post untouched
       verdicts.set(post.id, { postId: post.id, decision: 'unscored', reason: 'error' });
       schedule();
     });
@@ -99,7 +115,7 @@ function sendLabel(postId: string, label: LabelValue, source: 'user_button' | 's
 }
 
 window.addEventListener('message', (e) => {
-  if (e.source !== window || e.data?.ns !== MSG_NS) return;
+  if (e.source !== window || e.data?.ns !== MSG_NS || !alive()) return;
   if (e.data.type === 'posts') {
     for (const p of e.data.posts as Post[]) {
       if (!posts.has(p.id)) posts.set(p.id, p);
@@ -333,6 +349,10 @@ function pass() {
 
 let scheduled = false;
 function schedule() {
+  if (!alive()) {
+    observer?.disconnect();
+    return;
+  }
   if (scheduled) return;
   scheduled = true;
   requestAnimationFrame(() => {
@@ -368,7 +388,8 @@ function boot() {
   const style = document.createElement('style');
   style.textContent = CSS;
   (document.head ?? document.documentElement).append(style);
-  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  observer = new MutationObserver(schedule);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   schedule();
 }
 
