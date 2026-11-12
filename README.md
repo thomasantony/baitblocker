@@ -1,4 +1,4 @@
-# antirage
+# BaitBlocker
 
 A personal Chrome extension for x.com. It hides US-politics and ideology bait posted by accounts based outside the US: the minimum wage in dollars, US healthcare and taxes, Democrats vs Republicans, capitalism vs socialism, "nobody wants self-driving cars", and similar engagement farming.
 
@@ -18,8 +18,8 @@ Steps:
 1. Get the code and build it:
 
    ```bash
-   git clone <this repository's URL> antirage
-   cd antirage
+   git clone <this repository's URL> baitblocker
+   cd baitblocker
    npm install
    npm run build
    ```

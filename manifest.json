@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Antirage: foreign US-bait filter",
+  "name": "BaitBlocker",
   "version": "0.1.0",
   "description": "Hides US-politics and ideology bait from accounts based outside the US.",
   "permissions": ["storage"],
   "host_permissions": ["https://x.com/*", "https://api.liquid.ai/*", "https://pbs.twimg.com/*"],
   "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Ragebait Filter settings" },
+  "action": { "default_title": "BaitBlocker settings" },
   "options_page": "options.html",
   "content_scripts": [
     { "matches": ["https://x.com/*"], "js": ["inject.js"], "run_at": "document_start", "world": "MAIN" },
