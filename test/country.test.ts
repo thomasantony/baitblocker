@@ -82,6 +82,26 @@ describe('CountryFetcher', () => {
     expect(order).toEqual(['a', 'c', 'b']);
   });
 
+  it('cancels queued lookups but not the one in flight', async () => {
+    const order: string[] = [];
+    const f = new CountryFetcher({
+      fetch: vi.fn(async (url: string) => {
+        order.push(JSON.parse(decodeURIComponent(String(url).split('variables=')[1])).screenName);
+        return res(200, REAL);
+      }) as unknown as typeof fetch,
+      queryId: () => 'Q',
+      headers: () => ({}),
+      sleep: async () => {},
+    });
+    const all = Promise.all([f.lookup('a'), f.lookup('b'), f.lookup('c')]);
+    f.cancel('A');
+    f.cancel('B');
+    const [a, b] = await all;
+    expect(a.ok).toBe(true);
+    expect(b).toEqual({ ok: false, error: 'cancelled' });
+    expect(order).toEqual(['a', 'c']);
+  });
+
   it('reports a stale query id on 404', async () => {
     const f = new CountryFetcher({ fetch: vi.fn().mockResolvedValue(res(404, {})), queryId: () => 'old', headers: () => ({}), sleep: async () => {} });
     expect(await f.lookup('a')).toEqual({ ok: false, error: 'stale_query' });

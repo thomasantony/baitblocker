@@ -158,7 +158,12 @@ export class Scorer {
     // The topic fired: only filter when the author is based outside the allowed countries.
     if (!rec.author) return { ...v, decision: 'show' };
     const country = await this.o.store.getCountry(rec.author);
-    if (!isFresh(country)) return { ...v, decision: 'unscored', needsCountry: rec.author };
+    if (!isFresh(country)) {
+      // X allows ~50 lookups per 15 min, so only hide-level posts are worth one; blur-level posts from
+      // authors not already cached are shown.
+      if (v.decision === 'hide') return { ...v, decision: 'unscored', needsCountry: rec.author };
+      return { ...v, decision: 'show' };
+    }
     v.country = country.country;
     if (!country.country || isAllowed(country.country, this.o.allowedCountries())) v.decision = 'show';
     return v;

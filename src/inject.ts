@@ -61,7 +61,7 @@ function install() {
     if (e.data.type === 'lookupCountry' && typeof e.data.handle === 'string') {
       const handle: string = e.data.handle;
       fetcher.lookup(handle).then((result) => window.postMessage({ ns: MSG_NS, type: 'countryResult', handle, result }, location.origin));
-    }
+    } else if (e.data.type === 'cancelLookup' && typeof e.data.handle === 'string') fetcher.cancel(e.data.handle);
   });
 
   function handle(json: unknown) {

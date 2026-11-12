@@ -8,8 +8,12 @@ const verdicts = new Map<string, Verdict>();
 const requested = new Set<string>();
 const revealed = new Set<string>();
 const fallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
-/** Handles whose country lookup is in flight, mapped to the posts waiting on it. */
+/** Handles whose country is needed, mapped to the posts waiting on it. */
 const countryWaiters = new Map<string, Set<string>>();
+/** Handles whose lookup has been handed to the page script. */
+const lookingUp = new Set<string>();
+/** Articles on or near the screen, with the post ids they show (their own and the quoted post's). */
+const onScreen = new Map<Element, string[]>();
 
 const FALLBACK_DELAY_MS = 400;
 
@@ -84,17 +88,36 @@ function reaskQuoters(quotedId: string) {
   }
 }
 
-/** Asks the page script for the author's country; the posts waiting on it are re-asked when it lands. */
+/** Notes that the post needs its author's country; it is looked up once the post is on screen. */
 function awaitCountry(postId: string, handle: string) {
   let waiting = countryWaiters.get(handle);
-  if (!waiting) {
-    countryWaiters.set(handle, (waiting = new Set()));
-    window.postMessage({ ns: MSG_NS, type: 'lookupCountry', handle }, location.origin);
-  }
+  if (!waiting) countryWaiters.set(handle, (waiting = new Set()));
   waiting.add(postId);
+  syncLookups();
+}
+
+/**
+ * X allows ~50 country lookups per 15 minutes, so they are spent only on posts the user can see: asked
+ * for when a waiting post comes near the screen, and cancelled (if not started yet) when it scrolls away.
+ */
+function syncLookups() {
+  const visible = new Set([...onScreen.values()].flat());
+  for (const [handle, ids] of countryWaiters) {
+    const wanted = [...ids].some((id) => visible.has(id));
+    if (wanted && !lookingUp.has(handle)) {
+      lookingUp.add(handle);
+      window.postMessage({ ns: MSG_NS, type: 'lookupCountry', handle }, location.origin);
+    } else if (!wanted && lookingUp.has(handle)) {
+      lookingUp.delete(handle);
+      window.postMessage({ ns: MSG_NS, type: 'cancelLookup', handle }, location.origin);
+    }
+  }
 }
 
 async function onCountryResult(handle: string, result: LookupResult) {
+  // A cancelled lookup leaves its posts waiting; they are asked for again when back on screen.
+  if (!result.ok && result.error === 'cancelled') return;
+  lookingUp.delete(handle);
   const waiting = countryWaiters.get(handle) ?? new Set<string>();
   countryWaiters.delete(handle);
   if (result.ok) {
@@ -130,6 +153,8 @@ chrome.storage.onChanged.addListener((changes) => {
   // Thresholds or countries may have changed: re-ask; the background answers cached posts from stored probabilities.
   verdicts.clear();
   requested.clear();
+  for (const handle of lookingUp) window.postMessage({ ns: MSG_NS, type: 'cancelLookup', handle }, location.origin);
+  lookingUp.clear();
   countryWaiters.clear();
   for (const p of posts.values()) requestVerdict(p);
   schedule();
@@ -296,9 +321,29 @@ function render(article: HTMLElement, id: string, w: Want) {
   article.dataset.bbKey = w.key;
 }
 
+const shownIds = (id: string) => [id, ...(posts.get(id)?.quotedId ? [posts.get(id)!.quotedId!] : [])];
+
+const visibility = new IntersectionObserver(
+  (entries) => {
+    for (const e of entries) {
+      const id = e.isIntersecting ? postIdOf(e.target) : undefined;
+      if (id) onScreen.set(e.target, shownIds(id));
+      else onScreen.delete(e.target);
+    }
+    syncLookups();
+  },
+  { rootMargin: '300px 0px' },
+);
+
 function pass() {
   for (const article of document.querySelectorAll<HTMLElement>('article[data-testid="tweet"]')) {
+    visibility.observe(article);
     const id = postIdOf(article);
+    // X recycles article elements, so refresh what a visible one shows.
+    if (onScreen.has(article)) {
+      if (id) onScreen.set(article, shownIds(id));
+      else onScreen.delete(article);
+    }
     if (!id) {
       if (article.dataset.bbKey) clear(article);
       continue;
@@ -308,6 +353,8 @@ function pass() {
     const w = want(id);
     if (!matches(article, w)) render(article, id, w);
   }
+  for (const a of onScreen.keys()) if (!a.isConnected) onScreen.delete(a);
+  syncLookups();
 }
 
 let observer: MutationObserver | undefined;
@@ -315,6 +362,7 @@ let scheduled = false;
 function schedule() {
   if (!alive()) {
     observer?.disconnect();
+    visibility.disconnect();
     return;
   }
   if (scheduled) return;

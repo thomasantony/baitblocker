@@ -89,6 +89,13 @@ export class CountryFetcher {
     return p;
   }
 
+  /** Drops a queued lookup that has not started (its posts scrolled away); it resolves as "cancelled". */
+  cancel(handle: string) {
+    const key = handle.toLowerCase();
+    const i = this.queue.findIndex((j) => j.handle.toLowerCase() === key);
+    if (i >= 0) this.queue.splice(i, 1)[0].resolve({ ok: false, error: 'cancelled' });
+  }
+
   private async pump() {
     if (this.running) return;
     this.running = true;

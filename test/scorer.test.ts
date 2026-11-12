@@ -92,6 +92,14 @@ describe('Scorer', () => {
     expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'unscored', needsCountry: 'someone' });
   });
 
+  it('only looks up the country for hide-level posts; blur-level posts use the cache or are shown', async () => {
+    const { scorer, store } = setup({ country: null, probs: { us_politics: 0.6 } });
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'show' });
+    expect((await scorer.decide(post('1'))).needsCountry).toBeUndefined();
+    based(store, 'someone', 'Kenya');
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'blur', country: 'Kenya' });
+  });
+
   it('re-asks after the country arrives, answering from cache', async () => {
     const { scorer, store, client } = setup({ country: null });
     await scorer.decide(post('1'));

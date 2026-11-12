@@ -73,8 +73,8 @@ The page also shows today's token use and how many posts and countries are cache
    - `anti_tech`: a sweeping claim against modern technology ("nobody wants self-driving cars"). Pro-technology takes, including ones mocking its critics, don't count.
 
    The topic score is the highest of the three.
-2. **Country.** Only when the topic score reaches the blur threshold, the extension looks up the author's "Account based in" (X's `AboutAccountQuery`). Results are cached for 30 days, or 1 day when X has no value. X allows about 50 lookups per 15 minutes, so requests are spaced out and pause when the limit is close.
-3. **Decision.** Authors based in an allowed country are shown. Anywhere else, the post is hidden or blurred by its topic score. Authors already cached as US-based skip d1 entirely.
+2. **Country.** Only when the topic score reaches the hide threshold, the extension looks up the author's "Account based in" (X's `AboutAccountQuery`). X allows about 50 lookups per 15 minutes, so lookups are made only for posts on (or near) the screen, newest first, are cancelled when a post scrolls away before its turn, and pause when the limit is close. Results are cached for 30 days, or 1 day when X has no value.
+3. **Decision.** Authors based in an allowed country are shown. Anywhere else, the post is hidden or blurred by its topic score. Blur-level posts are only filtered when the author's country is already cached; otherwise they are shown. Authors already cached as US-based skip d1 entirely.
 
 **Photos.** Up to 2 of a post's own photos are sent to d1 as 360×360 JPEGs, which is enough for it to read text in an image. That costs about 180 extra input tokens per photo. Videos and GIFs are not scored.
 
@@ -87,7 +87,7 @@ The page also shows today's token use and how many posts and countries are cache
 ## Troubleshooting
 
 - **Nothing happens.** Check that the API key is saved, that you are logged in to x.com, and that you reloaded the tab after installing or updating.
-- **Posts stay blurred with "checking where @… is based".** The country lookup limit (about 50 per 15 minutes) is used up, which happens mostly while the cache is empty. It resets within 15 minutes; the newest posts are looked up first, and cached authors are not looked up again.
+- **Posts stay blurred with "checking where @… is based".** The country lookup limit (about 50 per 15 minutes) is used up, which happens mostly while the cache is empty. It resets within 15 minutes. Only hide-level posts on screen use lookups, and cached authors are not looked up again.
 - **Nothing is blurred or hidden at all.** Open the x.com tab's console: a `[baitblocker] Posts are shown unscored: …` warning names the cause (daily token budget used up, no API key, or d1 errors).
 - **Country lookups fail.** X changes the lookup request's id when it deploys. Open any profile's "About this account" page once and the extension picks up the new id. The page console shows `[baitblocker] country lookup failed … stale_query` while this is the cause.
 
