@@ -1,9 +1,9 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { exportAuthors, exportLabels, importSeeds, openRbf } from '../src/db';
+import { exportAuthors, exportLabels, importSeeds, openDb } from '../src/db';
 
 let n = 0;
-const fresh = () => openRbf(`rbf-test-${n++}`);
+const fresh = () => openDb(`baitblocker-test-${n++}`);
 
 describe('db', () => {
   it('upserts seeds by normalized handle and keeps running scores', async () => {

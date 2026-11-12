@@ -1,5 +1,5 @@
 import { openDB } from 'idb';
-import { IdbStore, openRbf } from './db';
+import { IdbStore, openDb } from './db';
 import { Scorer } from './scorer';
 import { D1Client, imageToDataUrl } from './scoring';
 import { DEFAULT_SETTINGS, QUESTIONS, loadSettings, loadUsage, recordUsage } from './settings';
@@ -12,7 +12,7 @@ let client: D1Client | undefined;
 const ready = (async () => {
   settings = await loadSettings();
   client = settings.apiKey ? new D1Client(settings.apiKey, settings.model) : undefined;
-  return openRbf();
+  return openDb();
 })();
 
 chrome.storage.onChanged.addListener(async (changes) => {
@@ -41,7 +41,7 @@ async function getScorer(): Promise<Scorer> {
 
 // Debug-only store for raw timeline responses, exported from the options page into fixtures/.
 const MAX_CAPTURES = 30;
-const captures = openDB('rbf-debug', 1, {
+const captures = openDB('baitblocker-debug', 1, {
   upgrade(db) {
     db.createObjectStore('captures', { keyPath: 'id', autoIncrement: true });
   },
@@ -82,7 +82,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
   })()
     .then(sendResponse)
     .catch((e) => {
-      console.warn('[rbf]', msg.type, 'failed:', e instanceof Error ? e.message : e);
+      console.warn('[baitblocker]', msg.type, 'failed:', e instanceof Error ? e.message : e);
       sendResponse(undefined);
     });
   return true;

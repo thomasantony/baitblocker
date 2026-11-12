@@ -1,10 +1,10 @@
 import { openDB } from 'idb';
 import { csvToSeeds } from './csv';
-import { exportAuthors, exportLabels, importSeeds, openRbf } from './db';
+import { exportAuthors, exportLabels, importSeeds, openDb } from './db';
 import { loadSettings, loadUsage, saveSettings } from './settings';
 
 const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
-const dbP = openRbf();
+const dbP = openDb();
 
 function status(id: string, msg: string, ok = true) {
   const n = $(id);
@@ -84,7 +84,7 @@ function download(name: string, text: string, type = 'application/x-ndjson') {
 $('exportLabels').addEventListener('click', async () => download('labels.jsonl', await exportLabels(await dbP)));
 $('exportAuthors').addEventListener('click', async () => download('authors.jsonl', await exportAuthors(await dbP)));
 $('exportCaptures').addEventListener('click', async () => {
-  const db = await openDB('rbf-debug', 1, {
+  const db = await openDB('baitblocker-debug', 1, {
     upgrade(d) {
       d.createObjectStore('captures', { keyPath: 'id', autoIncrement: true });
     },

@@ -71,8 +71,8 @@ async function onCountryResult(handle: string, result: LookupResult) {
       if (p) requestVerdict(p);
     }
   } else {
-    console.debug('[rbf] country lookup failed', handle, result.error);
-    if (result.error === 'stale_query') console.info('[rbf] Open any profile\'s "About this account" page once so the extension can learn X\'s new query id.');
+    console.debug('[baitblocker] country lookup failed', handle, result.error);
+    if (result.error === 'stale_query') console.info('[baitblocker] Open any profile\'s "About this account" page once so the extension can learn X\'s new query id.');
     for (const id of waiting) verdicts.set(id, { postId: id, decision: 'unscored', reason: 'error' });
   }
   schedule();
@@ -175,9 +175,9 @@ function stateFor(id: string): { state: State; v?: Verdict } {
 }
 
 function clear(article: HTMLElement) {
-  article.classList.remove('rbf-pending', 'rbf-hide', 'rbf-blur', 'rbf-show');
-  article.querySelectorAll(':scope > .rbf-ui, .rbf-qbar').forEach((n) => n.remove());
-  article.querySelectorAll('.rbf-qblur, .rbf-qpending').forEach((n) => n.classList.remove('rbf-qblur', 'rbf-qpending'));
+  article.classList.remove('bb-pending', 'bb-hide', 'bb-blur', 'bb-show');
+  article.querySelectorAll(':scope > .bb-ui, .bb-qbar').forEach((n) => n.remove());
+  article.querySelectorAll('.bb-qblur, .bb-qpending').forEach((n) => n.classList.remove('bb-qblur', 'bb-qpending'));
 }
 
 /** The embedded quoted-post box: the clickable container around the post's second author name. */
@@ -194,7 +194,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 }
 
 function button(text: string, onClick: () => void): HTMLButtonElement {
-  const b = el('button', 'rbf-btn', text);
+  const b = el('button', 'bb-btn', text);
   b.type = 'button';
   b.addEventListener('click', (e) => {
     e.preventDefault();
@@ -232,8 +232,8 @@ function reveal(id: string) {
 
 /** Label buttons plus "show"; any of them reveals the post. */
 function blurBar(id: string, v: Verdict, title: string): HTMLElement {
-  const bar = swallow(el('div', 'rbf-ui rbf-bar rbf-blurbar'));
-  bar.append(el('span', 'rbf-meta', `${title} · ${metaText(v)}`));
+  const bar = swallow(el('div', 'bb-ui bb-bar bb-blurbar'));
+  bar.append(el('span', 'bb-meta', `${title} · ${metaText(v)}`));
   for (const label of ['ragebait', 'fine'] as const) {
     bar.append(
       button(label === 'ragebait' ? 'bait' : label, () => {
@@ -243,7 +243,7 @@ function blurBar(id: string, v: Verdict, title: string): HTMLElement {
     );
   }
   const show = button('show', () => reveal(id));
-  show.classList.add('rbf-link');
+  show.classList.add('bb-link');
   bar.append(show);
   return bar;
 }
@@ -260,19 +260,19 @@ function quoteStateFor(qid: string): { state: QuoteState; v?: Verdict } {
 function renderQuote(article: HTMLElement, qid: string, state: QuoteState, v?: Verdict) {
   const box = quoteBox(article);
   if (!box || state === 'none') return;
-  if (state === 'qpending') return box.classList.add('rbf-qpending');
-  box.classList.add('rbf-qblur');
+  if (state === 'qpending') return box.classList.add('bb-qpending');
+  box.classList.add('bb-qblur');
   const bar = blurBar(qid, v!, 'Quoted post blurred');
-  bar.classList.add('rbf-qbar');
+  bar.classList.add('bb-qbar');
   box.before(bar);
 }
 
 function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
   clear(article);
-  article.classList.add(`rbf-${state}`);
+  article.classList.add(`bb-${state}`);
   if (state === 'hide' && v) {
-    const bar = swallow(el('div', 'rbf-ui rbf-bar'));
-    bar.append(el('span', 'rbf-meta', `Hidden · ${metaText(v)}`));
+    const bar = swallow(el('div', 'bb-ui bb-bar'));
+    bar.append(el('span', 'bb-meta', `Hidden · ${metaText(v)}`));
     bar.append(
       button('show', () => {
         sendLabel(id, 'fine', 'show_click');
@@ -284,16 +284,16 @@ function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
     // Controls sit in their own bar above the post so they never cover the text; hovering the post peeks.
     article.prepend(blurBar(id, v, 'Blurred'));
   } else if (state === 'show' && settings?.enabled.flag !== false) {
-    const flag = swallow(el('div', 'rbf-ui rbf-flag'));
-    const toggle = button('⚑', () => flag.classList.toggle('rbf-open'));
+    const flag = swallow(el('div', 'bb-ui bb-flag'));
+    const toggle = button('⚑', () => flag.classList.toggle('bb-open'));
     toggle.title = 'Label this post';
-    const menu = el('div', 'rbf-menu');
+    const menu = el('div', 'bb-menu');
     for (const label of ['ragebait'] as const) {
       menu.append(
         button('bait', () => {
           sendLabel(id, label, 'user_button');
-          flag.classList.remove('rbf-open');
-          flag.classList.add('rbf-done');
+          flag.classList.remove('bb-open');
+          flag.classList.add('bb-done');
           toggle.textContent = '✓';
         }),
       );
@@ -321,8 +321,8 @@ function pass() {
     const key = `${id}:${state}:${q?.state ?? ''}`;
     // Recycled elements get a new id, so the key changes and stale UI is cleared before re-rendering.
     const needsUi = state === 'hide' || state === 'blur' || (state === 'show' && settings?.enabled.flag !== false);
-    const quoteOk = q?.state !== 'qblur' || !!article.querySelector('.rbf-qbar') || !quoteBox(article);
-    if (rendered.get(article) === key && (!needsUi || article.querySelector(':scope > .rbf-ui')) && quoteOk) continue;
+    const quoteOk = q?.state !== 'qblur' || !!article.querySelector('.bb-qbar') || !quoteBox(article);
+    if (rendered.get(article) === key && (!needsUi || article.querySelector(':scope > .bb-ui')) && quoteOk) continue;
     render(article, id, state, v);
     if (qid && q) renderQuote(article, qid, q.state, q.v);
     rendered.set(article, key);
@@ -342,26 +342,26 @@ function schedule() {
 // ---------- styles & boot ----------
 
 const CSS = `
-article.rbf-pending { opacity: .5; }
-article.rbf-hide, article.rbf-blur, article.rbf-show { position: relative; }
-article.rbf-hide > :not(.rbf-ui) { display: none !important; }
-article.rbf-blur > :not(.rbf-ui) { filter: blur(12px); pointer-events: none; user-select: none; transition: filter .15s; }
-article.rbf-blur:hover > :not(.rbf-ui) { filter: none; transition-delay: .4s; }
-.rbf-ui { font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: rgb(113,118,123); }
-.rbf-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
-.rbf-bar .rbf-meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rbf-btn { font: inherit; cursor: pointer; border: 1px solid rgb(83,100,113); background: rgba(0,0,0,.65); color: #e7e9ea; border-radius: 999px; padding: 3px 12px; }
-.rbf-btn:hover { background: rgba(29,155,240,.85); border-color: transparent; }
-.rbf-blurbar .rbf-btn { padding: 1px 10px; }
-.rbf-bar:not(.rbf-blurbar) .rbf-btn, .rbf-bar .rbf-btn.rbf-link { background: transparent; color: rgb(29,155,240); border-color: transparent; padding: 0 0 0 4px; }
-.rbf-flag { position: absolute; top: 10px; right: 52px; z-index: 2; display: flex; gap: 4px; opacity: 0; transition: opacity .1s; }
-article:hover > .rbf-flag, .rbf-flag.rbf-open, .rbf-flag.rbf-done { opacity: 1; }
-.rbf-flag > .rbf-btn { padding: 0 6px; }
-.rbf-qpending { opacity: .5; }
-.rbf-qblur { filter: blur(10px); pointer-events: none; user-select: none; }
-.rbf-qbar { padding: 6px 0; }
-.rbf-menu { display: none; gap: 4px; }
-.rbf-flag.rbf-open .rbf-menu { display: flex; }
+article.bb-pending { opacity: .5; }
+article.bb-hide, article.bb-blur, article.bb-show { position: relative; }
+article.bb-hide > :not(.bb-ui) { display: none !important; }
+article.bb-blur > :not(.bb-ui) { filter: blur(12px); pointer-events: none; user-select: none; transition: filter .15s; }
+article.bb-blur:hover > :not(.bb-ui) { filter: none; transition-delay: .4s; }
+.bb-ui { font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: rgb(113,118,123); }
+.bb-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
+.bb-bar .bb-meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-btn { font: inherit; cursor: pointer; border: 1px solid rgb(83,100,113); background: rgba(0,0,0,.65); color: #e7e9ea; border-radius: 999px; padding: 3px 12px; }
+.bb-btn:hover { background: rgba(29,155,240,.85); border-color: transparent; }
+.bb-blurbar .bb-btn { padding: 1px 10px; }
+.bb-bar:not(.bb-blurbar) .bb-btn, .bb-bar .bb-btn.bb-link { background: transparent; color: rgb(29,155,240); border-color: transparent; padding: 0 0 0 4px; }
+.bb-flag { position: absolute; top: 10px; right: 52px; z-index: 2; display: flex; gap: 4px; opacity: 0; transition: opacity .1s; }
+article:hover > .bb-flag, .bb-flag.bb-open, .bb-flag.bb-done { opacity: 1; }
+.bb-flag > .bb-btn { padding: 0 6px; }
+.bb-qpending { opacity: .5; }
+.bb-qblur { filter: blur(10px); pointer-events: none; user-select: none; }
+.bb-qbar { padding: 6px 0; }
+.bb-menu { display: none; gap: 4px; }
+.bb-flag.bb-open .bb-menu { display: flex; }
 `;
 
 function boot() {

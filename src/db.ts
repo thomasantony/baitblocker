@@ -1,17 +1,17 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { AuthorRecord, CountryRecord, LabelRecord, PostRecord } from './types';
 
-interface RbfSchema extends DBSchema {
+interface BaitSchema extends DBSchema {
   posts: { key: string; value: PostRecord };
   labels: { key: number; value: LabelRecord; indexes: { postId: string } };
   authors: { key: string; value: AuthorRecord };
   countries: { key: string; value: CountryRecord };
 }
 
-export type RbfDB = IDBPDatabase<RbfSchema>;
+export type BaitDB = IDBPDatabase<BaitSchema>;
 
-export function openRbf(name = 'rbf'): Promise<RbfDB> {
-  return openDB<RbfSchema>(name, 2, {
+export function openDb(name = 'baitblocker'): Promise<BaitDB> {
+  return openDB<BaitSchema>(name, 2, {
     upgrade(db, oldVersion) {
       if (oldVersion < 1) {
         db.createObjectStore('posts', { keyPath: 'id' });
@@ -42,7 +42,7 @@ export interface Store {
 }
 
 export class IdbStore implements Store {
-  constructor(private db: RbfDB) {}
+  constructor(private db: BaitDB) {}
   getPost(id: string) {
     return this.db.get('posts', id);
   }
@@ -67,7 +67,7 @@ export class IdbStore implements Store {
 }
 
 /** Upsert seed entries; existing alpha/beta are kept. Returns the number imported. */
-export async function importSeeds(db: RbfDB, seeds: { handle: string; text?: string }[]): Promise<number> {
+export async function importSeeds(db: BaitDB, seeds: { handle: string; text?: string }[]): Promise<number> {
   const tx = db.transaction('authors', 'readwrite');
   let n = 0;
   for (const s of seeds) {
@@ -83,14 +83,14 @@ export async function importSeeds(db: RbfDB, seeds: { handle: string; text?: str
 }
 
 /** labels.jsonl: each label joined with its post record. */
-export async function exportLabels(db: RbfDB): Promise<string> {
+export async function exportLabels(db: BaitDB): Promise<string> {
   const labels = await db.getAll('labels');
   const lines: string[] = [];
   for (const l of labels) lines.push(JSON.stringify({ ...l, post: (await db.get('posts', l.postId)) ?? null }));
   return lines.join('\n') + (lines.length ? '\n' : '');
 }
 
-export async function exportAuthors(db: RbfDB): Promise<string> {
+export async function exportAuthors(db: BaitDB): Promise<string> {
   const authors = await db.getAll('authors');
   return authors.map((a) => JSON.stringify({ ...a, score: authorScore(a) })).join('\n') + (authors.length ? '\n' : '');
 }

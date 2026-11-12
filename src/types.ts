@@ -121,4 +121,4 @@ export interface Usage {
   decisions: Record<Decision, number>;
 }
 
-export const MSG_NS = 'rbf:v0';
+export const MSG_NS = 'baitblocker:v1';

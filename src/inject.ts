@@ -8,7 +8,7 @@ let capture = false;
 
 // ---------- account-country lookups (run here so they carry the user's X session) ----------
 
-const QID_KEY = 'rbf:aboutQueryId';
+const QID_KEY = 'baitblocker:aboutQueryId';
 let queryId = safeGet(QID_KEY) ?? DEFAULT_ABOUT_QUERY_ID;
 let bearer = DEFAULT_BEARER;
 

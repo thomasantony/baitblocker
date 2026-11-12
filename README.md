@@ -84,7 +84,7 @@ Click **Remove** on the extension's card in `chrome://extensions`. That deletes 
 
 - **Nothing happens.** Check that the API key is saved, that you are logged in to x.com, and that you reloaded the tab after installing or updating.
 - **Posts stay dimmed for a long time.** The country lookup limit is probably used up. It resets within 15 minutes, and cached authors are not looked up again.
-- **Country lookups fail.** X changes the lookup request's id when it deploys. Open any profile's "About this account" page once and the extension picks up the new id. The page console shows `[rbf] country lookup failed … stale_query` while this is the cause.
+- **Country lookups fail.** X changes the lookup request's id when it deploys. Open any profile's "About this account" page once and the extension picks up the new id. The page console shows `[baitblocker] country lookup failed … stale_query` while this is the cause.
 
 ## Development
 
