@@ -55,8 +55,6 @@ export function extractPost(tweet: Obj): Post | undefined {
     id,
     text: tweetText(tweet),
     author: screenName(tweet),
-    isReply: typeof tweet.legacy?.in_reply_to_status_id_str === 'string',
-    source: 'parser',
   };
   const images = photoUrls(tweet);
   const quoted = unwrapTweet(tweet.quoted_status_result?.result);
@@ -76,7 +74,7 @@ function mergePosts(a: Post | undefined, b: Post): Post {
   if (!a) return b;
   const out: Post = { ...a };
   for (const [k, v] of Object.entries(b) as [keyof Post, any][]) {
-    if (out[k] === undefined || out[k] === '' || out[k] === false) (out as any)[k] = v;
+    if (out[k] === undefined || out[k] === '') (out as any)[k] = v;
   }
   return out;
 }

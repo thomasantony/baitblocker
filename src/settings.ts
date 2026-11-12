@@ -7,28 +7,31 @@ export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
   model: 'd1.1',
   thresholds: { ...QUESTIONS.thresholds },
-  enabled: { pending: true, hide: true, blur: true },
   dailyTokenBudget: 1_000_000,
-  captureFixtures: false,
   allowedCountries: ['United States', 'North America'],
   scoreImages: true,
 };
 
+type Stored = Partial<Settings> & { thresholdsFor?: number };
+
 export async function loadSettings(): Promise<Settings> {
   const { settings } = await chrome.storage.local.get('settings');
-  const s = (settings ?? {}) as Partial<Settings> & { thresholdsFor?: number };
+  const s = (settings ?? {}) as Stored;
   // Thresholds are tuned per question set, so saved ones only apply to the version they were saved under.
   const saved = s.thresholdsFor === QUESTIONS.version ? s.thresholds : undefined;
   return {
-    ...DEFAULT_SETTINGS,
-    ...s,
+    apiKey: s.apiKey ?? DEFAULT_SETTINGS.apiKey,
+    model: s.model ?? DEFAULT_SETTINGS.model,
     thresholds: { ...DEFAULT_SETTINGS.thresholds, ...saved },
-    enabled: { ...DEFAULT_SETTINGS.enabled, ...s.enabled },
+    dailyTokenBudget: s.dailyTokenBudget ?? DEFAULT_SETTINGS.dailyTokenBudget,
+    allowedCountries: s.allowedCountries ?? DEFAULT_SETTINGS.allowedCountries,
+    scoreImages: s.scoreImages ?? DEFAULT_SETTINGS.scoreImages,
   };
 }
 
 export async function saveSettings(s: Settings): Promise<void> {
-  await chrome.storage.local.set({ settings: { ...s, thresholdsFor: QUESTIONS.version } });
+  const stored: Stored = { ...s, thresholdsFor: QUESTIONS.version };
+  await chrome.storage.local.set({ settings: stored });
 }
 
 export const today = () => new Date().toLocaleDateString('en-CA');

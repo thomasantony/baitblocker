@@ -11,7 +11,7 @@ describe('GraphQLTimelineParser', () => {
   it('parses a home timeline, including visibility wrappers and both handle paths', () => {
     const p = byId(load('synthetic-home.json'));
     expect(Object.keys(p).sort()).toEqual(['100', '101', '102']);
-    expect(p['100']).toMatchObject({ text: 'Plain post from alice', author: 'alice', isReply: false });
+    expect(p['100']).toMatchObject({ text: 'Plain post from alice', author: 'alice' });
     expect(p['101']).toMatchObject({ text: 'Legacy-handle post from bob', author: 'bob' });
   });
 
@@ -23,9 +23,9 @@ describe('GraphQLTimelineParser', () => {
     const posts = parser.parse(load('synthetic-detail.json'));
     const p = Object.fromEntries(posts.map((x) => [x.id, x]));
     expect(posts.filter((x) => x.id === '200')).toHaveLength(1);
-    expect(p['200']).toMatchObject({ author: 'dave', quotedText: 'The quoted take', quotedAuthor: 'erin', isReply: false });
+    expect(p['200']).toMatchObject({ author: 'dave', quotedText: 'The quoted take', quotedAuthor: 'erin' });
     expect(p['201']).toMatchObject({ author: 'erin', text: 'The quoted take' });
-    expect(p['300']).toMatchObject({ author: 'frank', isReply: true });
+    expect(p['300']).toMatchObject({ author: 'frank' });
   });
 
   it('tolerates missing and renamed fields without throwing', () => {

@@ -11,14 +11,9 @@ export interface Post {
   quotedId?: string;
   /** This post's own photo URLs (not the quote's when quotedId is set), sized for scoring. */
   imageUrls?: string[];
-  isReply: boolean;
-  /** "parser" when it came from intercepted JSON, "dom" when scraped as a fallback. */
-  source?: 'parser' | 'dom';
 }
 
 export type Decision = 'hide' | 'blur' | 'show';
-export type LabelValue = 'ragebait' | 'racist' | 'fine';
-export type LabelSource = 'user_button' | 'show_click' | 'account_seed';
 
 export interface Question {
   id: string;
@@ -27,8 +22,8 @@ export interface Question {
 
 export interface QuestionsConfig {
   version: number;
+  /** Topic questions; a post's score is the highest of their probabilities. */
   questions: Question[];
-  combine: { max_of: string[]; weighted: Record<string, number> };
   thresholds: Thresholds;
   /**
    * Asked (in a second, one-question call) only for posts that quote a post scoring at least the blur
@@ -52,40 +47,18 @@ export interface PostRecord {
   author?: string;
   seenAt: number;
   probs: Record<string, number>;
-  score: number;
-  decision: Decision;
   questionsVersion: number;
-  /** "seeded" when decided by the account seed list, "d1" when scored. */
-  reason?: 'seeded' | 'd1';
-}
-
-export interface LabelRecord {
-  id?: number;
-  postId: string;
-  label: LabelValue;
-  source: LabelSource;
-  at: number;
-}
-
-export interface AuthorRecord {
-  handle: string;
-  alpha: number;
-  beta: number;
-  seeded: boolean;
-  seedText?: string;
-  postsSeen: number;
 }
 
 /** What the background returns to a tab for one post. */
 export interface Verdict {
   postId: string;
-  /** "unscored" when scoring was skipped (no key, budget exceeded, API error). */
+  /** "unscored" when scoring was skipped (no key, budget exceeded, API error) or waits on the country. */
   decision: Decision | 'unscored';
   score?: number;
   topQuestion?: string;
   author?: string;
-  authorScore?: number;
-  reason?: 'seeded' | 'd1' | 'cache' | 'budget' | 'no_key' | 'error' | 'country';
+  reason?: 'd1' | 'cache' | 'budget' | 'no_key' | 'error' | 'country';
   /** The author's "Account based in" value, when known. */
   country?: string;
   /** Set (with decision "unscored") when the topic fired and the author's country must be looked up first. */
@@ -105,9 +78,7 @@ export interface Settings {
   apiKey: string;
   model: string;
   thresholds: Thresholds;
-  enabled: { pending: boolean; hide: boolean; blur: boolean };
   dailyTokenBudget: number;
-  captureFixtures: boolean;
   /** "Account based in" values whose posts are never filtered (case-insensitive). */
   allowedCountries: string[];
   /** Send attached photos to d1 along with the text. */

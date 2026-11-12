@@ -46,8 +46,8 @@ describe('d1 images', () => {
   it('sends images as a top-level array only when present', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ answers: {}, usage: { input_tokens: 1 } })));
     const c = new D1Client('k', 'd1.1', fetchImpl as unknown as typeof fetch);
-    await c.score({ id: '1', text: 't', isReply: false }, QUESTIONS.questions, ['data:image/jpeg;base64,AA==']);
-    await c.score({ id: '2', text: 't', isReply: false }, QUESTIONS.questions);
+    await c.score({ id: '1', text: 't' }, QUESTIONS.questions, ['data:image/jpeg;base64,AA==']);
+    await c.score({ id: '2', text: 't' }, QUESTIONS.questions);
     const bodies = fetchImpl.mock.calls.map((call) => JSON.parse((call as unknown as [string, RequestInit])[1].body as string));
     expect(bodies[0].images).toEqual(['data:image/jpeg;base64,AA==']);
     expect('images' in bodies[1]).toBe(false);

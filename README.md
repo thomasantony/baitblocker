@@ -57,11 +57,11 @@ Click **Remove** on the extension's card in `chrome://extensions`. That deletes 
 ## Settings
 
 - **d1 API key, model and daily token budget.** Scoring stops for the day once the budget is used up, and posts are shown unscored.
+- **Send attached photos.** On by default.
 - **Countries never filtered.** Defaults to `United States, North America`, matching what X shows on About pages.
 - **Thresholds.** Defaults: hide at 0.8 or above, blur from 0.5.
-- **UI toggles**: dim while scoring, hide, blur, and whether attached photos are sent.
-- **Seed blocked accounts**: import handles (JSON or CSV) whose posts are always hidden.
-- **Export** of your labels and cached authors, for tuning.
+
+The page also shows today's token use and how many posts and countries are cached.
 
 ## How it decides
 
@@ -96,8 +96,4 @@ npm test           # vitest
 npm run typecheck
 ```
 
-Fixtures: enable "Capture raw timeline responses" in settings, browse x.com, export "captured responses", and save pieces into `fixtures/` (gitignored except `synthetic-*`).
-
-Eval: export labels from settings, then run `npm run eval -- ~/Downloads/labels.jsonl [config.json] [--verbose]` to see how a questions config decides on your labeled posts. d1 answers are cached in `.eval-cache.json`, and the key is read from `$LIQUID_API_KEY` or `liquid_token.txt`.
-
-`SPEC.md` is the original v0 spec, from when the extension scored general ragebait; its questions have since been replaced.
+`fixtures/synthetic-*.json` are hand-made GraphQL responses used by the parser tests.

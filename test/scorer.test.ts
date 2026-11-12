@@ -3,17 +3,12 @@ import type { Store } from '../src/db';
 import { Scorer } from '../src/scorer';
 import { D1Client, type ScoreResult, type ScoringClient } from '../src/scoring';
 import { QUESTIONS } from '../src/settings';
-import type { AuthorRecord, CountryRecord, LabelRecord, Post, PostRecord } from '../src/types';
+import type { CountryRecord, Post, PostRecord } from '../src/types';
 
 class MemStore implements Store {
   posts = new Map<string, PostRecord>();
-  authors = new Map<string, AuthorRecord>();
-  labels: LabelRecord[] = [];
   async getPost(id: string) { return this.posts.get(id); }
   async putPost(p: PostRecord) { this.posts.set(p.id, p); }
-  async getAuthor(h: string) { return this.authors.get(h); }
-  async putAuthor(a: AuthorRecord) { this.authors.set(a.handle, { ...a }); }
-  async addLabel(l: LabelRecord) { this.labels.push(l); }
   countries = new Map<string, CountryRecord>();
   async getCountry(h: string) { return this.countries.get(h); }
   async putCountry(c: CountryRecord) { this.countries.set(c.handle, c); }
@@ -22,7 +17,7 @@ class MemStore implements Store {
 const based = (store: MemStore, handle: string, country?: string, fetchedAt = Date.now()) =>
   store.countries.set(handle, { handle, country, fetchedAt });
 
-const post = (id: string, extra: Partial<Post> = {}): Post => ({ id, text: `post ${id}`, author: 'someone', isReply: false, ...extra });
+const post = (id: string, extra: Partial<Post> = {}): Post => ({ id, text: `post ${id}`, author: 'someone', ...extra });
 
 function setup(opts: { probs?: Record<string, number>; budgetLeft?: boolean; concurrency?: number; country?: string | null; images?: (p: Post) => Promise<string[]> } = {}) {
   const store = new MemStore();
@@ -45,6 +40,7 @@ function setup(opts: { probs?: Record<string, number>; budgetLeft?: boolean; con
     client: () => client,
     config: QUESTIONS,
     thresholds: () => ({ hide: 0.85, blur: 0.4 }),
+    allowedCountries: () => ['United States'],
     budget,
     concurrency: opts.concurrency ?? 2,
     flushMs: 1,
@@ -54,13 +50,11 @@ function setup(opts: { probs?: Record<string, number>; budgetLeft?: boolean; con
 }
 
 describe('Scorer', () => {
-  it('scores, stores, and updates the author Beta estimate', async () => {
+  it('scores and stores the probabilities', async () => {
     const { scorer, store, budget } = setup();
     const v = await scorer.decide(post('1'));
     expect(v).toMatchObject({ decision: 'hide', reason: 'd1', topQuestion: 'us_politics', country: 'South Asia', author: 'someone' });
-    expect(store.posts.get('1')).toMatchObject({ decision: 'hide', probs: { us_politics: 0.95 }, questionsVersion: QUESTIONS.version });
-    expect(store.authors.get('someone')).toMatchObject({ alpha: 1.95, postsSeen: 1 });
-    expect(store.authors.get('someone')!.beta).toBeCloseTo(1.05);
+    expect(store.posts.get('1')).toMatchObject({ probs: { us_politics: 0.95 }, questionsVersion: QUESTIONS.version });
     expect(budget.record).toHaveBeenCalledWith(100, 'hide');
   });
 
@@ -71,14 +65,13 @@ describe('Scorer', () => {
     expect(client.score).toHaveBeenCalledTimes(1);
   });
 
-  it('re-scores posts cached under an older question set without re-counting the author', async () => {
+  it('re-scores posts cached under an older question set', async () => {
     const { scorer, client, store } = setup();
     await scorer.decide(post('1'));
     store.posts.get('1')!.questionsVersion = QUESTIONS.version - 1;
     expect(await scorer.decide(post('1'))).toMatchObject({ reason: 'd1' });
     expect(client.score).toHaveBeenCalledTimes(2);
     expect(store.posts.get('1')!.questionsVersion).toBe(QUESTIONS.version);
-    expect(store.authors.get('someone')).toMatchObject({ postsSeen: 1, alpha: 1.95 });
   });
 
   it('limits requests in flight to the batch size', async () => {
@@ -92,15 +85,6 @@ describe('Scorer', () => {
     const { scorer, client } = setup({ budgetLeft: false });
     expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'unscored', reason: 'budget' });
     expect(client.score).not.toHaveBeenCalled();
-  });
-
-  it('hides seeded authors (and quotes of them) without calling d1, recording an account_seed label', async () => {
-    const { scorer, client, store } = setup();
-    store.authors.set('blocked', { handle: 'blocked', alpha: 1, beta: 1, seeded: true, postsSeen: 0 });
-    expect(await scorer.decide(post('1', { author: '@Blocked' }))).toMatchObject({ decision: 'hide', reason: 'seeded', topQuestion: 'seeded_author' });
-    expect(await scorer.decide(post('2', { quotedAuthor: 'blocked' }))).toMatchObject({ decision: 'hide', reason: 'seeded' });
-    expect(client.score).not.toHaveBeenCalled();
-    expect(store.labels.map((l) => [l.postId, l.source])).toEqual([['1', 'account_seed'], ['2', 'account_seed']]);
   });
 
   it('asks for the author country when the topic fires and the country is unknown', async () => {
@@ -154,13 +138,6 @@ describe('Scorer', () => {
     expect(images).toHaveBeenCalledTimes(2);
   });
 
-  it('does not hide a post for quoting a seeded author when the quote is scored on its own', async () => {
-    const { scorer, store } = setup();
-    store.authors.set('blocked', { handle: 'blocked', alpha: 1, beta: 1, seeded: true, postsSeen: 0 });
-    expect(await scorer.decide(post('1', { quotedAuthor: 'blocked', quotedId: '9', author: 'someone' }))).toMatchObject({ reason: 'd1' });
-    expect(await scorer.decide(post('9', { author: 'blocked' }))).toMatchObject({ reason: 'seeded', decision: 'hide' });
-  });
-
   it('degrades to unscored when d1 fails', async () => {
     const { scorer, client } = setup();
     vi.mocked(client.score).mockRejectedValueOnce(new Error('boom'));
@@ -180,7 +157,7 @@ describe('quote endorsement', () => {
       }),
     };
     const budget = { canSpend: vi.fn(async () => true), record: vi.fn(async () => {}) };
-    const scorer = new Scorer({ store, client: () => client, config: QUESTIONS, thresholds: () => ({ hide: 0.8, blur: 0.5 }), budget, flushMs: 1 });
+    const scorer = new Scorer({ store, client: () => client, config: QUESTIONS, thresholds: () => ({ hide: 0.8, blur: 0.5 }), allowedCountries: () => ['United States'], budget, flushMs: 1 });
     const quoting = post('1', { author: 'quoter', text: 'This 👆 so true', quotedId: '9', quotedText: 'You don’t hate socialism...', quotedAuthor: 'baiter' });
     return { store, client, budget, scorer, quoting };
   }

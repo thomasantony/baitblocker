@@ -10,13 +10,6 @@
       "text": "Is this post (including any text in attached images) a sweeping, low-effort take designed to farm replies on a divisive theme, such as capitalism vs socialism, billionaires or the rich, the working class, or rejecting modern technology (\"nobody wants self-driving cars\", AI, smartphones, cashless payments), stated as a slogan or bold claim rather than a specific argument? Answer no for specific, substantive arguments, news, or personal anecdotes without a provocative generalization."
     }
   ],
-  "combine": {
-    "max_of": [
-      "us_politics",
-      "ideology_bait"
-    ],
-    "weighted": {}
-  },
   "thresholds": {
     "hide": 0.8,
     "blur": 0.5

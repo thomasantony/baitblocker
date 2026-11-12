@@ -6,3 +6,5 @@ block_list.html
 fixtures/*.json
 !fixtures/synthetic-*.json
 .eval-cache.json
+.DS_Store
+*.zip

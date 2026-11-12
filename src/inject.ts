@@ -4,7 +4,6 @@ import { GraphQLTimelineParser, isTimelineUrl } from './parser';
 import { MSG_NS } from './types';
 
 const parser = new GraphQLTimelineParser();
-let capture = false;
 
 // ---------- account-country lookups (run here so they carry the user's X session) ----------
 
@@ -59,18 +58,16 @@ if (!(window as any)[INSTALLED]) {
 function install() {
   window.addEventListener('message', (e) => {
     if (e.source !== window || e.data?.ns !== MSG_NS) return;
-    if (e.data.type === 'config') capture = !!e.data.capture;
-    else if (e.data.type === 'lookupCountry' && typeof e.data.handle === 'string') {
+    if (e.data.type === 'lookupCountry' && typeof e.data.handle === 'string') {
       const handle: string = e.data.handle;
       fetcher.lookup(handle).then((result) => window.postMessage({ ns: MSG_NS, type: 'countryResult', handle, result }, location.origin));
     }
   });
 
-  function handle(url: string, json: unknown) {
+  function handle(json: unknown) {
     try {
       const posts = parser.parse(json);
       if (posts.length) window.postMessage({ ns: MSG_NS, type: 'posts', posts }, location.origin);
-      if (capture) window.postMessage({ ns: MSG_NS, type: 'capture', url, body: json }, location.origin);
     } catch {
       // never let parsing affect the page
     }
@@ -87,7 +84,7 @@ function install() {
         res
           .clone()
           .json()
-          .then((j) => handle(url, j), () => {});
+          .then(handle, () => {});
       }
     } catch {
       // ignore
@@ -104,7 +101,7 @@ function install() {
         try {
           const body =
             this.responseType === 'json' ? this.response : this.responseType === '' || this.responseType === 'text' ? JSON.parse(this.responseText) : undefined;
-          if (body) handle(href, body);
+          if (body) handle(body);
         } catch {
           // ignore
         }

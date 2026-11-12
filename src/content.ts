@@ -1,17 +1,24 @@
 // Isolated-world content script: matches DOM posts to verdicts and renders UI states.
 import type { LookupResult } from './country';
 import { MAX_IMAGES, scoringImageUrl } from './parser';
-import { loadSettings } from './settings';
-import { MSG_NS, type LabelValue, type Post, type Settings, type Verdict } from './types';
+import { MSG_NS, type Post, type Verdict } from './types';
 
 const posts = new Map<string, Post>();
 const verdicts = new Map<string, Verdict>();
 const requested = new Set<string>();
 const revealed = new Set<string>();
 const fallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
-let settings: Settings | undefined;
+/** Handles whose country lookup is in flight, mapped to the posts waiting on it. */
+const countryWaiters = new Map<string, Set<string>>();
 
 const FALLBACK_DELAY_MS = 400;
+
+/** Names for the question that decided a post. */
+const REASONS: Record<string, string> = {
+  us_politics: 'US-politics bait',
+  ideology_bait: 'ideology bait',
+  endorses_quote: 'endorses quoted bait',
+};
 
 /**
  * False once the extension has been reloaded or updated: this copy of the script is then orphaned (Chrome
@@ -25,17 +32,10 @@ function alive(): boolean {
     return false;
   }
 }
-let observer: MutationObserver | undefined;
-/** Questions named in the UI when they are the top reason; everything else shows as "ragebait". */
-const NAMED: Record<string, string> = {
-  us_politics: 'US-politics bait',
-  ideology_bait: 'ideology bait',
-  endorses_quote: 'endorses quoted bait',
-};
-/** Handles whose country lookup is in flight, mapped to the posts waiting on it. */
-const countryWaiters = new Map<string, Set<string>>();
 
 // ---------- messaging ----------
+
+const unscored = (postId: string): Verdict => ({ postId, decision: 'unscored', reason: 'error' });
 
 function requestVerdict(post: Post) {
   if (requested.has(post.id)) return;
@@ -44,17 +44,18 @@ function requestVerdict(post: Post) {
     .sendMessage({ type: 'score', post })
     .then((v: Verdict | undefined) => {
       // Bait waiting on its author's country is blurred provisionally (see stateFor) until the lookup lands.
-      verdicts.set(post.id, v ?? { postId: post.id, decision: 'unscored', reason: 'error' });
-      if (v?.needsCountry) return awaitCountry(post.id, v.needsCountry), schedule();
-      warnSkipped(v);
-      reaskQuoters(post.id);
+      verdicts.set(post.id, v ?? unscored(post.id));
+      if (v?.needsCountry) awaitCountry(post.id, v.needsCountry);
+      else {
+        warnSkipped(v);
+        reaskQuoters(post.id);
+      }
       schedule();
     })
     .catch(() => {
       // Orphaned by an extension reload: the fresh copy takes over this post.
       if (!alive()) return;
-      // worker unavailable: show the post untouched
-      verdicts.set(post.id, { postId: post.id, decision: 'unscored', reason: 'error' });
+      verdicts.set(post.id, unscored(post.id));
       schedule();
     });
 }
@@ -82,7 +83,7 @@ function reaskQuoters(quotedId: string) {
   }
 }
 
-/** Leaves the post pending (dimmed) until the page script has fetched the author's country. */
+/** Asks the page script for the author's country; the posts waiting on it are re-asked when it lands. */
 function awaitCountry(postId: string, handle: string) {
   let waiting = countryWaiters.get(handle);
   if (!waiting) {
@@ -105,13 +106,9 @@ async function onCountryResult(handle: string, result: LookupResult) {
   } else {
     console.warn('[baitblocker] country lookup failed', handle, result.error);
     if (result.error === 'stale_query') console.info('[baitblocker] Open any profile\'s "About this account" page once so the extension can learn X\'s new query id.');
-    for (const id of waiting) verdicts.set(id, { postId: id, decision: 'unscored', reason: 'error' });
+    for (const id of waiting) verdicts.set(id, unscored(id));
   }
   schedule();
-}
-
-function sendLabel(postId: string, label: LabelValue, source: 'user_button' | 'show_click') {
-  chrome.runtime.sendMessage({ type: 'label', label: { postId, label, source } }).catch(() => {});
 }
 
 window.addEventListener('message', (e) => {
@@ -124,26 +121,17 @@ window.addEventListener('message', (e) => {
     schedule();
   } else if (e.data.type === 'countryResult' && typeof e.data.handle === 'string') {
     onCountryResult(e.data.handle, e.data.result as LookupResult);
-  } else if (e.data.type === 'capture') {
-    chrome.runtime.sendMessage({ type: 'capture', url: e.data.url, body: e.data.body }).catch(() => {});
   }
 });
 
-async function refreshSettings() {
-  settings = await loadSettings();
-  window.postMessage({ ns: MSG_NS, type: 'config', capture: settings.captureFixtures }, location.origin);
-}
-
 chrome.storage.onChanged.addListener((changes) => {
-  if (!changes.settings) return;
-  refreshSettings().then(() => {
-    // thresholds may have changed: re-ask; the background answers cached posts from stored probabilities
-    verdicts.clear();
-    requested.clear();
-    countryWaiters.clear();
-    for (const p of posts.values()) requestVerdict(p);
-    schedule();
-  });
+  if (!changes.settings || !alive()) return;
+  // Thresholds or countries may have changed: re-ask; the background answers cached posts from stored probabilities.
+  verdicts.clear();
+  requested.clear();
+  countryWaiters.clear();
+  for (const p of posts.values()) requestVerdict(p);
+  schedule();
 });
 
 // ---------- DOM matching ----------
@@ -153,6 +141,7 @@ function postIdOf(article: Element): string | undefined {
   return /\/status\/(\d+)/.exec(link?.getAttribute('href') ?? '')?.[1];
 }
 
+/** Fallback for posts that never showed up in intercepted JSON. */
 function scrapePost(article: Element, id: string): Post | undefined {
   const texts = article.querySelectorAll<HTMLElement>('[data-testid="tweetText"]');
   const handles = [...article.querySelectorAll('[data-testid="User-Name"] a[href^="/"]')]
@@ -170,8 +159,6 @@ function scrapePost(article: Element, id: string): Post | undefined {
     quotedText: texts[1]?.innerText,
     quotedAuthor: handles[1],
     imageUrls: images.length ? [...new Set(images)].slice(0, MAX_IMAGES) : undefined,
-    isReply: false,
-    source: 'dom',
   };
 }
 
@@ -191,27 +178,26 @@ function ensurePost(article: Element, id: string) {
 }
 
 // ---------- rendering ----------
+//
+// State lives in our own data-bb / data-bbq attributes, not classes: X re-renders a post on hover and
+// resets its `class`, which would drop a class-based blur while leaving our bar behind.
 
 type State = 'pending' | 'hide' | 'blur' | 'show';
-const rendered = new WeakMap<Element, string>();
+type QuoteState = 'blur' | 'pending' | 'show';
 
 function stateFor(id: string): { state: State; v?: Verdict } {
   const v = verdicts.get(id);
-  const en = settings?.enabled;
-  if (!v) return { state: en?.pending === false ? 'show' : 'pending' };
+  if (!v) return { state: 'pending' };
   if (revealed.has(id)) return { state: 'show', v };
-  if (v.needsCountry) return { state: en?.blur === false ? 'pending' : 'blur', v };
+  if (v.needsCountry) return { state: 'blur', v };
   if (v.decision === 'unscored') return { state: 'show', v };
-  let d: State = v.decision;
-  if (d === 'hide' && en?.hide === false) d = 'blur';
-  if (d === 'blur' && en?.blur === false) d = 'show';
-  return { state: d, v };
+  return { state: v.decision, v };
 }
 
-function clear(article: HTMLElement) {
-  article.classList.remove('bb-pending', 'bb-hide', 'bb-blur', 'bb-show');
-  article.querySelectorAll(':scope > .bb-ui, .bb-qbar').forEach((n) => n.remove());
-  article.querySelectorAll('.bb-qblur, .bb-qpending').forEach((n) => n.classList.remove('bb-qblur', 'bb-qpending'));
+/** A bait quote only blurs its own box (never hidden: the quoting post usually is fine). */
+function quoteStateFor(qid: string): { state: QuoteState; v?: Verdict } {
+  const { state, v } = stateFor(qid);
+  return { state: state === 'hide' ? 'blur' : state, v };
 }
 
 /** The embedded quoted-post box: the clickable container around the post's second author name. */
@@ -227,126 +213,103 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
   return n;
 }
 
-function button(text: string, onClick: () => void): HTMLButtonElement {
-  const b = el('button', 'bb-btn', text);
-  b.type = 'button';
-  b.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClick();
-  });
-  return b;
-}
-
-/** Stops clicks on our UI from opening the post. */
-function swallow(n: HTMLElement) {
-  n.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
-  return n;
-}
-
-function reasonName(v: Verdict): string {
-  if (v.topQuestion === 'seeded_author') return 'seeded account';
-  if (v.topQuestion && NAMED[v.topQuestion]) return NAMED[v.topQuestion];
-  return 'ragebait';
-}
-
 function metaText(v: Verdict): string {
-  if (v.needsCountry) return `${reasonName(v)} ${(v.score ?? 0).toFixed(2)} · checking where @${v.needsCountry} is based…`;
-  const parts = [`${reasonName(v)} ${(v.score ?? 0).toFixed(2)}`];
-  if (v.author) parts.push(`@${v.author}`);
-  if (v.country) parts.push(`based in ${v.country}`);
+  const parts = [`${REASONS[v.topQuestion ?? ''] ?? 'bait'} ${(v.score ?? 0).toFixed(2)}`];
+  if (v.needsCountry) parts.push(`checking where @${v.needsCountry} is based…`);
+  else {
+    if (v.author) parts.push(`@${v.author}`);
+    if (v.country) parts.push(`based in ${v.country}`);
+  }
   return parts.join(' · ');
 }
 
-function reveal(id: string) {
-  revealed.add(id);
-  schedule();
+/** One line of text plus a "show" link; clicks never reach the post underneath. */
+function bar(id: string, title: string, v: Verdict): HTMLElement {
+  const b = el('div', 'bb-bar');
+  b.addEventListener('click', (e) => e.stopPropagation());
+  b.append(el('span', 'bb-meta', `${title} · ${metaText(v)}`));
+  const show = el('button', 'bb-show', 'show');
+  show.type = 'button';
+  show.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    revealed.add(id);
+    schedule();
+  });
+  b.append(show);
+  return b;
 }
 
-/** Label buttons plus "show"; any of them reveals the post. */
-function blurBar(id: string, v: Verdict, title: string): HTMLElement {
-  const bar = swallow(el('div', 'bb-ui bb-bar bb-blurbar'));
-  bar.append(el('span', 'bb-meta', `${title} · ${metaText(v)}`));
-  for (const label of ['ragebait', 'fine'] as const) {
-    bar.append(
-      button(label === 'ragebait' ? 'bait' : label, () => {
-        sendLabel(id, label, 'user_button');
-        reveal(id);
-      }),
-    );
+/** What one article should look like; `key` changes whenever the bar text would. */
+interface Want {
+  key: string;
+  state: State;
+  v?: Verdict;
+  quote?: { id: string; state: QuoteState; v?: Verdict };
+}
+
+function want(id: string): Want {
+  const { state, v } = stateFor(id);
+  // The quote only matters when the quoting post itself is shown.
+  const qid = state === 'show' ? posts.get(id)?.quotedId : undefined;
+  const q = qid ? { id: qid, ...quoteStateFor(qid) } : undefined;
+  return { key: `${id}|${state}|${v?.needsCountry ?? v?.country ?? ''}|${q?.state ?? ''}|${q?.v?.needsCountry ?? q?.v?.country ?? ''}`, state, v, quote: q };
+}
+
+/** True when the article's DOM already matches `w` (X may have re-rendered parts of it since). */
+function matches(article: HTMLElement, w: Want): boolean {
+  if (article.dataset.bbKey !== w.key) return false;
+  if ((article.dataset.bb ?? 'show') !== w.state) return false;
+  const hasBar = !!article.querySelector(':scope > .bb-bar');
+  if (hasBar !== (w.state === 'hide' || w.state === 'blur')) return false;
+  if (w.quote?.state === 'blur' || w.quote?.state === 'pending') {
+    const box = quoteBox(article);
+    if (box && box.dataset.bbq !== w.quote.state) return false;
+    if (box && w.quote.state === 'blur' && !box.previousElementSibling?.classList.contains('bb-qbar')) return false;
   }
-  const show = button('show', () => reveal(id));
-  show.classList.add('bb-link');
-  bar.append(show);
-  return bar;
+  return true;
 }
 
-type QuoteState = 'qblur' | 'qpending' | 'none';
-
-/** A bait quote only blurs its own box (never hidden: the quoting post usually is fine). */
-function quoteStateFor(qid: string): { state: QuoteState; v?: Verdict } {
-  const { state, v } = stateFor(qid);
-  if (state === 'hide' || state === 'blur') return { state: 'qblur', v };
-  return { state: state === 'pending' ? 'qpending' : 'none', v };
+function clear(article: HTMLElement) {
+  delete article.dataset.bb;
+  delete article.dataset.bbKey;
+  article.querySelectorAll(':scope > .bb-bar, .bb-qbar').forEach((n) => n.remove());
+  article.querySelectorAll<HTMLElement>('[data-bbq]').forEach((n) => delete n.dataset.bbq);
 }
 
-function renderQuote(article: HTMLElement, qid: string, state: QuoteState, v?: Verdict) {
-  const box = quoteBox(article);
-  if (!box || state === 'none') return;
-  if (state === 'qpending') return box.classList.add('bb-qpending');
-  box.classList.add('bb-qblur');
-  const bar = blurBar(qid, v!, 'Quoted post blurred');
-  bar.classList.add('bb-qbar');
-  box.before(bar);
-}
-
-function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
+function render(article: HTMLElement, id: string, w: Want) {
   clear(article);
-  article.classList.add(`bb-${state}`);
-  if (state === 'hide' && v) {
-    const bar = swallow(el('div', 'bb-ui bb-bar'));
-    bar.append(el('span', 'bb-meta', `Hidden · ${metaText(v)}`));
-    bar.append(
-      button('show', () => {
-        sendLabel(id, 'fine', 'show_click');
-        reveal(id);
-      }),
-    );
-    article.prepend(bar);
-  } else if (state === 'blur' && v) {
-    // Controls sit in their own bar above the post so they never cover the text; hovering the post peeks.
-    article.prepend(blurBar(id, v, 'Blurred'));
+  if (w.state !== 'show') article.dataset.bb = w.state;
+  // The bar sits above the post so it never covers the text; hovering a blurred post peeks.
+  if (w.state === 'hide' && w.v) article.prepend(bar(id, 'Hidden', w.v));
+  else if (w.state === 'blur' && w.v) article.prepend(bar(id, 'Blurred', w.v));
+  const box = w.quote && w.quote.state !== 'show' ? quoteBox(article) : undefined;
+  if (box && w.quote) {
+    box.dataset.bbq = w.quote.state;
+    if (w.quote.state === 'blur' && w.quote.v) {
+      const qb = bar(w.quote.id, 'Quoted post blurred', w.quote.v);
+      qb.classList.add('bb-qbar');
+      box.before(qb);
+    }
   }
+  article.dataset.bbKey = w.key;
 }
 
 function pass() {
   for (const article of document.querySelectorAll<HTMLElement>('article[data-testid="tweet"]')) {
     const id = postIdOf(article);
     if (!id) {
-      if (rendered.has(article)) {
-        clear(article);
-        rendered.delete(article);
-      }
+      if (article.dataset.bbKey) clear(article);
       continue;
     }
     if (!verdicts.has(id)) ensurePost(article, id);
-    const { state, v } = stateFor(id);
-    // The quote only matters when the quoting post itself is shown.
-    const qid = state === 'show' ? posts.get(id)?.quotedId : undefined;
-    const q = qid ? quoteStateFor(qid) : undefined;
-    const key = `${id}:${state}:${q?.state ?? ''}`;
     // Recycled elements get a new id, so the key changes and stale UI is cleared before re-rendering.
-    const needsUi = state === 'hide' || state === 'blur';
-    const quoteOk = q?.state !== 'qblur' || !!article.querySelector('.bb-qbar') || !quoteBox(article);
-    if (rendered.get(article) === key && (!needsUi || article.querySelector(':scope > .bb-ui')) && quoteOk) continue;
-    render(article, id, state, v);
-    if (qid && q) renderQuote(article, qid, q.state, q.v);
-    rendered.set(article, key);
+    const w = want(id);
+    if (!matches(article, w)) render(article, id, w);
   }
 }
 
+let observer: MutationObserver | undefined;
 let scheduled = false;
 function schedule() {
   if (!alive()) {
@@ -364,24 +327,19 @@ function schedule() {
 // ---------- styles & boot ----------
 
 const CSS = `
-article.bb-pending { opacity: .5; }
-article.bb-hide, article.bb-blur { position: relative; }
+article[data-bb="pending"], [data-bbq="pending"] { opacity: .5; }
 /* X lays the article out as a flex row; stack our bar above the post instead of squeezing it sideways. */
-article.bb-hide, article.bb-blur { flex-direction: column !important; }
-article.bb-hide > .bb-ui, article.bb-blur > .bb-ui { align-self: stretch; }
-article.bb-hide > :not(.bb-ui) { display: none !important; }
-article.bb-blur > :not(.bb-ui) { filter: blur(12px); pointer-events: none; user-select: none; transition: filter .15s; }
-article.bb-blur:hover > :not(.bb-ui) { filter: none; transition-delay: .4s; }
-.bb-ui { font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: rgb(113,118,123); }
-.bb-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
-.bb-bar .bb-meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bb-btn { font: inherit; cursor: pointer; border: 1px solid rgb(83,100,113); background: rgba(0,0,0,.65); color: #e7e9ea; border-radius: 999px; padding: 3px 12px; }
-.bb-btn:hover { background: rgba(29,155,240,.85); border-color: transparent; }
-.bb-blurbar .bb-btn { padding: 1px 10px; }
-.bb-bar:not(.bb-blurbar) .bb-btn, .bb-bar .bb-btn.bb-link { background: transparent; color: rgb(29,155,240); border-color: transparent; padding: 0 0 0 4px; }
-.bb-qpending { opacity: .5; }
-.bb-qblur { filter: blur(10px); pointer-events: none; user-select: none; }
-.bb-qbar { padding: 6px 0; }
+article[data-bb="hide"], article[data-bb="blur"] { flex-direction: column !important; }
+article[data-bb] > .bb-bar { align-self: stretch; }
+article[data-bb="hide"] > :not(.bb-bar) { display: none !important; }
+article[data-bb="blur"] > :not(.bb-bar) { filter: blur(12px); pointer-events: none; user-select: none; transition: filter .15s; }
+article[data-bb="blur"]:hover > :not(.bb-bar) { filter: none; transition-delay: .4s; }
+[data-bbq="blur"] { filter: blur(10px); pointer-events: none; user-select: none; }
+.bb-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: rgb(113,118,123); }
+.bb-bar.bb-qbar { padding: 6px 0; }
+.bb-meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-show { font: inherit; cursor: pointer; border: 0; background: transparent; color: rgb(29,155,240); padding: 0 0 0 4px; }
+.bb-show:hover { text-decoration: underline; }
 `;
 
 function boot() {
@@ -389,9 +347,8 @@ function boot() {
   style.textContent = CSS;
   (document.head ?? document.documentElement).append(style);
   observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-bb', 'data-bbq'] });
   schedule();
 }
 
-refreshSettings();
 boot();
