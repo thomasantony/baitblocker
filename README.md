@@ -32,7 +32,7 @@ Steps:
 
 3. Click the extension's toolbar icon (pin it from the puzzle-piece menu if it is hidden). The settings page opens. Paste your Liquid API key and click **Save**.
 
-4. Open or reload x.com. Posts are dimmed briefly while they are scored, then shown, blurred, or collapsed into a one-line "Hidden" bar with a **show** button. A post that scores as bait is blurred with "checking where @… is based" until its author's country is known.
+4. Open or reload x.com. Posts are dimmed briefly while they are scored, then shown, blurred, or collapsed into a one-line "Hidden" bar with a **show** button. A post that scores as bait stays visible until its author's country is known, then is hidden or blurred if the author is based outside the US.
 
 ### Updating
 
@@ -87,7 +87,7 @@ The page also shows today's token use and how many posts and countries are cache
 ## Troubleshooting
 
 - **Nothing happens.** Check that the API key is saved, that you are logged in to x.com, and that you reloaded the tab after installing or updating.
-- **Posts stay blurred with "checking where @… is based".** The country lookup limit (about 50 per 15 minutes) is used up, which happens mostly while the cache is empty. It resets within 15 minutes. Only hide-level posts on screen use lookups, and cached authors are not looked up again.
+- **Bait isn't filtered right away.** Its author's country is still being looked up. If the lookup limit (about 50 per 15 minutes) is used up, which happens mostly while the cache is empty, posts stay visible until it resets within 15 minutes. Only hide-level posts on screen use lookups, and cached authors are not looked up again.
 - **Nothing is blurred or hidden at all.** Open the x.com tab's console: a `[baitblocker] Posts are shown unscored: …` warning names the cause (daily token budget used up, no API key, or d1 errors).
 - **Country lookups fail.** X changes the lookup request's id when it deploys. Open any profile's "About this account" page once and the extension picks up the new id. The page console shows `[baitblocker] country lookup failed … stale_query` while this is the cause.
 

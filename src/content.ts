@@ -48,7 +48,6 @@ function requestVerdict(post: Post) {
   chrome.runtime
     .sendMessage({ type: 'score', post })
     .then((v: Verdict | undefined) => {
-      // Bait waiting on its author's country is blurred provisionally (see stateFor) until the lookup lands.
       verdicts.set(post.id, v ?? unscored(post.id));
       if (v?.needsCountry) awaitCountry(post.id, v.needsCountry);
       else {
@@ -215,7 +214,8 @@ function stateFor(id: string): { state: State; v?: Verdict } {
   const v = verdicts.get(id);
   if (!v) return { state: 'pending' };
   if (revealed.has(id)) return { state: 'show', v };
-  if (v.needsCountry) return { state: 'blur', v };
+  // Bait waiting on its author's country stays visible; it is filtered only once the country is known.
+  if (v.needsCountry) return { state: 'show', v };
   if (v.decision === 'unscored') return { state: 'show', v };
   return { state: v.decision, v };
 }
@@ -241,11 +241,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 
 function metaText(v: Verdict): string {
   const parts = [`${REASONS[v.topQuestion ?? ''] ?? 'bait'} ${(v.score ?? 0).toFixed(2)}`];
-  if (v.needsCountry) parts.push(`checking where @${v.needsCountry} is based…`);
-  else {
-    if (v.author) parts.push(`@${v.author}`);
-    if (v.country) parts.push(`based in ${v.country}`);
-  }
+  if (v.author) parts.push(`@${v.author}`);
+  if (v.country) parts.push(`based in ${v.country}`);
   return parts.join(' · ');
 }
 
