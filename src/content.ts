@@ -344,6 +344,9 @@ function schedule() {
 const CSS = `
 article.bb-pending { opacity: .5; }
 article.bb-hide, article.bb-blur, article.bb-show { position: relative; }
+/* X lays the article out as a flex row; stack our bar above the post instead of squeezing it sideways. */
+article.bb-hide, article.bb-blur { flex-direction: column !important; }
+article.bb-hide > .bb-ui, article.bb-blur > .bb-ui { align-self: stretch; }
 article.bb-hide > :not(.bb-ui) { display: none !important; }
 article.bb-blur > :not(.bb-ui) { filter: blur(12px); pointer-events: none; user-select: none; transition: filter .15s; }
 article.bb-blur:hover > :not(.bb-ui) { filter: none; transition-delay: .4s; }
