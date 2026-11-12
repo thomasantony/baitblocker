@@ -9,7 +9,7 @@ interface BaitSchema extends DBSchema {
 export type BaitDB = IDBPDatabase<BaitSchema>;
 
 export function openDb(name = 'baitblocker'): Promise<BaitDB> {
-  return openDB<BaitSchema>(name, 1, {
+  return openDB<BaitSchema>(name, 3, {
     upgrade(db) {
       db.createObjectStore('posts', { keyPath: 'id' });
       db.createObjectStore('countries', { keyPath: 'handle' });
