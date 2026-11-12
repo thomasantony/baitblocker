@@ -11,6 +11,8 @@ You need:
 - **Chrome** (or another Chromium browser such as Edge, Brave or Arc).
 - **Node.js** (a recent LTS release) and **git**, to build the extension.
 - A **Liquid AI API key** for the d1 decision model. Create one from Liquid AI's developer docs at [docs.liquid.ai](https://docs.liquid.ai). Billing is per input token; see [liquid.ai/pricing](https://www.liquid.ai/pricing).
+
+  > **Cost:** as of November 2026, a new Liquid Console organization gets $2 of free credit, and d1.1 costs $0.02 per million input tokens (output is free). That is about 100 million input tokens. A scored post typically takes somewhere around 500–1,500, more with photos, so the free credit should cover well over 50,000 scored posts: months to years of normal scrolling. The default daily budget of 1M tokens caps spending at about $0.02 a day. Check [liquid.ai/pricing](https://www.liquid.ai/pricing) for current terms.
 - To be **logged in to x.com** in that browser. Country lookups use your X session.
 
 Steps:
