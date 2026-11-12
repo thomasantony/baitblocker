@@ -6,16 +6,28 @@ export interface ScoreResult {
 }
 
 export interface ScoringClient {
-  score(post: Post, questions: Question[]): Promise<ScoreResult>;
+  /** `images` are base64 data URLs (d1 does not accept remote URLs). */
+  score(post: Post, questions: Question[], images?: string[]): Promise<ScoreResult>;
 }
 
 export const D1_ENDPOINT = 'https://api.liquid.ai/decisions/v1/systemone';
 
-/** Text sent to the model as `state`. */
+/** Text sent to the model as `state`. A quote with a known id is scored on its own, so it is left out. */
 export function postToState(post: Post): string {
   let s = post.text;
-  if (post.quotedText) s += `\n\n[Quoting${post.quotedAuthor ? ' @' + post.quotedAuthor : ''}]\n${post.quotedText}`;
+  if (post.quotedText && !post.quotedId) s += `\n\n[Quoting${post.quotedAuthor ? ' @' + post.quotedAuthor : ''}]\n${post.quotedText}`;
   return s;
+}
+
+/** Fetches an image and returns it as a data URL. */
+export async function imageToDataUrl(url: string, fetchImpl: typeof fetch = (...a) => fetch(...a)): Promise<string> {
+  const res = await fetchImpl(url);
+  if (!res.ok) throw new Error(`image HTTP ${res.status}`);
+  const type = res.headers.get('content-type')?.split(';')[0] || 'image/jpeg';
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${type};base64,${btoa(bin)}`;
 }
 
 /**
@@ -29,10 +41,11 @@ export class D1Client implements ScoringClient {
     private fetchImpl: typeof fetch = (...a) => fetch(...a),
   ) {}
 
-  async score(post: Post, questions: Question[]): Promise<ScoreResult> {
+  async score(post: Post, questions: Question[], images: string[] = []): Promise<ScoreResult> {
     const body = {
       model: this.model,
       state: postToState(post),
+      ...(images.length ? { images } : {}),
       questions: Object.fromEntries(questions.map((q) => [q.id, { type: 'noul', instructions: q.text }])),
     };
     const res = await this.fetchImpl(D1_ENDPOINT, {

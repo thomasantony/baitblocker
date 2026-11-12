@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Hides US-politics and ideology bait from accounts based outside the US.",
   "permissions": ["storage"],
-  "host_permissions": ["https://x.com/*", "https://api.liquid.ai/*"],
+  "host_permissions": ["https://x.com/*", "https://api.liquid.ai/*", "https://pbs.twimg.com/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "Ragebait Filter settings" },
   "options_page": "options.html",

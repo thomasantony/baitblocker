@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dailyTokenBudget: 1_000_000,
   captureFixtures: false,
   allowedCountries: ['United States', 'North America'],
+  scoreImages: true,
 };
 
 export async function loadSettings(): Promise<Settings> {
@@ -40,10 +41,13 @@ export async function loadUsage(): Promise<Usage> {
   return u && u.date === today() ? u : emptyUsage();
 }
 
-export async function recordUsage(tokens: number, decision: Decision): Promise<void> {
+/** Without a decision only tokens are counted (e.g. the quote-stance follow-up call). */
+export async function recordUsage(tokens: number, decision?: Decision): Promise<void> {
   const u = await loadUsage();
   u.tokens += tokens;
-  u.scored++;
-  u.decisions[decision]++;
+  if (decision) {
+    u.scored++;
+    u.decisions[decision]++;
+  }
   await chrome.storage.local.set({ usage: u });
 }

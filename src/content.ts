@@ -1,5 +1,6 @@
 // Isolated-world content script: matches DOM posts to verdicts and renders UI states.
 import type { LookupResult } from './country';
+import { MAX_IMAGES, scoringImageUrl } from './parser';
 import { loadSettings } from './settings';
 import { MSG_NS, type LabelValue, type Post, type Settings, type Verdict } from './types';
 
@@ -15,6 +16,7 @@ const FALLBACK_DELAY_MS = 400;
 const NAMED: Record<string, string> = {
   us_politics: 'US-politics bait',
   ideology_bait: 'ideology bait',
+  endorses_quote: 'endorses quoted bait',
 };
 /** Handles whose country lookup is in flight, mapped to the posts waiting on it. */
 const countryWaiters = new Map<string, Set<string>>();
@@ -29,6 +31,7 @@ function requestVerdict(post: Post) {
     .then((v: Verdict | undefined) => {
       if (v?.needsCountry) return awaitCountry(post.id, v.needsCountry);
       verdicts.set(post.id, v ?? { postId: post.id, decision: 'unscored', reason: 'error' });
+      reaskQuoters(post.id);
       schedule();
     })
     .catch(() => {
@@ -36,6 +39,15 @@ function requestVerdict(post: Post) {
       verdicts.set(post.id, { postId: post.id, decision: 'unscored', reason: 'error' });
       schedule();
     });
+}
+
+/** Posts quoting `quotedId` may now inherit its score (if they endorse it): ask again (answered from cache). */
+function reaskQuoters(quotedId: string) {
+  for (const p of posts.values()) {
+    if (p.quotedId !== quotedId || !verdicts.has(p.id)) continue;
+    requested.delete(p.id);
+    requestVerdict(p);
+  }
 }
 
 /** Leaves the post pending (dimmed) until the page script has fetched the author's country. */
@@ -115,8 +127,20 @@ function scrapePost(article: Element, id: string): Post | undefined {
     .map((a) => /^\/([A-Za-z0-9_]+)$/.exec(a.getAttribute('href') ?? '')?.[1])
     .filter((h): h is string => !!h);
   const text = texts[0]?.innerText ?? '';
-  if (!text && !handles.length) return undefined;
-  return { id, text, author: handles[0], quotedText: texts[1]?.innerText, quotedAuthor: handles[1], isReply: false, source: 'dom' };
+  const images = [...article.querySelectorAll<HTMLImageElement>('[data-testid="tweetPhoto"] img')]
+    .map((i) => scoringImageUrl(i.src))
+    .filter((u): u is string => !!u);
+  if (!text && !handles.length && !images.length) return undefined;
+  return {
+    id,
+    text,
+    author: handles[0],
+    quotedText: texts[1]?.innerText,
+    quotedAuthor: handles[1],
+    imageUrls: images.length ? [...new Set(images)].slice(0, MAX_IMAGES) : undefined,
+    isReply: false,
+    source: 'dom',
+  };
 }
 
 function ensurePost(article: Element, id: string) {
@@ -152,7 +176,14 @@ function stateFor(id: string): { state: State; v?: Verdict } {
 
 function clear(article: HTMLElement) {
   article.classList.remove('rbf-pending', 'rbf-hide', 'rbf-blur', 'rbf-show');
-  article.querySelectorAll(':scope > .rbf-ui').forEach((n) => n.remove());
+  article.querySelectorAll(':scope > .rbf-ui, .rbf-qbar').forEach((n) => n.remove());
+  article.querySelectorAll('.rbf-qblur, .rbf-qpending').forEach((n) => n.classList.remove('rbf-qblur', 'rbf-qpending'));
+}
+
+/** The embedded quoted-post box: the clickable container around the post's second author name. */
+function quoteBox(article: HTMLElement): HTMLElement | undefined {
+  const box = article.querySelectorAll('[data-testid="User-Name"]')[1]?.closest<HTMLElement>('div[role="link"]');
+  return box && article.contains(box) ? box : undefined;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
@@ -199,6 +230,43 @@ function reveal(id: string) {
   schedule();
 }
 
+/** Label buttons plus "show"; any of them reveals the post. */
+function blurBar(id: string, v: Verdict, title: string): HTMLElement {
+  const bar = swallow(el('div', 'rbf-ui rbf-bar rbf-blurbar'));
+  bar.append(el('span', 'rbf-meta', `${title} · ${metaText(v)}`));
+  for (const label of ['ragebait', 'fine'] as const) {
+    bar.append(
+      button(label === 'ragebait' ? 'bait' : label, () => {
+        sendLabel(id, label, 'user_button');
+        reveal(id);
+      }),
+    );
+  }
+  const show = button('show', () => reveal(id));
+  show.classList.add('rbf-link');
+  bar.append(show);
+  return bar;
+}
+
+type QuoteState = 'qblur' | 'qpending' | 'none';
+
+/** A bait quote only blurs its own box (never hidden: the quoting post usually is fine). */
+function quoteStateFor(qid: string): { state: QuoteState; v?: Verdict } {
+  const { state, v } = stateFor(qid);
+  if (state === 'hide' || state === 'blur') return { state: 'qblur', v };
+  return { state: state === 'pending' ? 'qpending' : 'none', v };
+}
+
+function renderQuote(article: HTMLElement, qid: string, state: QuoteState, v?: Verdict) {
+  const box = quoteBox(article);
+  if (!box || state === 'none') return;
+  if (state === 'qpending') return box.classList.add('rbf-qpending');
+  box.classList.add('rbf-qblur');
+  const bar = blurBar(qid, v!, 'Quoted post blurred');
+  bar.classList.add('rbf-qbar');
+  box.before(bar);
+}
+
 function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
   clear(article);
   article.classList.add(`rbf-${state}`);
@@ -214,20 +282,7 @@ function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
     article.prepend(bar);
   } else if (state === 'blur' && v) {
     // Controls sit in their own bar above the post so they never cover the text; hovering the post peeks.
-    const bar = swallow(el('div', 'rbf-ui rbf-bar rbf-blurbar'));
-    bar.append(el('span', 'rbf-meta', `Blurred · ${metaText(v)}`));
-    for (const label of ['ragebait', 'fine'] as const) {
-      bar.append(
-        button(label === 'ragebait' ? 'bait' : label, () => {
-          sendLabel(id, label, 'user_button');
-          reveal(id);
-        }),
-      );
-    }
-    const show = button('show', () => reveal(id));
-    show.classList.add('rbf-link');
-    bar.append(show);
-    article.prepend(bar);
+    article.prepend(blurBar(id, v, 'Blurred'));
   } else if (state === 'show' && settings?.enabled.flag !== false) {
     const flag = swallow(el('div', 'rbf-ui rbf-flag'));
     const toggle = button('⚑', () => flag.classList.toggle('rbf-open'));
@@ -260,11 +315,16 @@ function pass() {
     }
     if (!verdicts.has(id)) ensurePost(article, id);
     const { state, v } = stateFor(id);
-    const key = `${id}:${state}`;
+    // The quote only matters when the quoting post itself is shown.
+    const qid = state === 'show' ? posts.get(id)?.quotedId : undefined;
+    const q = qid ? quoteStateFor(qid) : undefined;
+    const key = `${id}:${state}:${q?.state ?? ''}`;
     // Recycled elements get a new id, so the key changes and stale UI is cleared before re-rendering.
     const needsUi = state === 'hide' || state === 'blur' || (state === 'show' && settings?.enabled.flag !== false);
-    if (rendered.get(article) === key && (!needsUi || article.querySelector(':scope > .rbf-ui'))) continue;
+    const quoteOk = q?.state !== 'qblur' || !!article.querySelector('.rbf-qbar') || !quoteBox(article);
+    if (rendered.get(article) === key && (!needsUi || article.querySelector(':scope > .rbf-ui')) && quoteOk) continue;
     render(article, id, state, v);
+    if (qid && q) renderQuote(article, qid, q.state, q.v);
     rendered.set(article, key);
   }
 }
@@ -297,6 +357,9 @@ article.rbf-blur:hover > :not(.rbf-ui) { filter: none; transition-delay: .4s; }
 .rbf-flag { position: absolute; top: 10px; right: 52px; z-index: 2; display: flex; gap: 4px; opacity: 0; transition: opacity .1s; }
 article:hover > .rbf-flag, .rbf-flag.rbf-open, .rbf-flag.rbf-done { opacity: 1; }
 .rbf-flag > .rbf-btn { padding: 0 6px; }
+.rbf-qpending { opacity: .5; }
+.rbf-qblur { filter: blur(10px); pointer-events: none; user-select: none; }
+.rbf-qbar { padding: 6px 0; }
 .rbf-menu { display: none; gap: 4px; }
 .rbf-flag.rbf-open .rbf-menu { display: flex; }
 `;

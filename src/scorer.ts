@@ -1,4 +1,4 @@
-import { combine } from './combine';
+import { combine, type Combined } from './combine';
 import { isAllowed, isFresh } from './country';
 import { authorScore, newAuthor, normHandle, type Store } from './db';
 import type { ScoringClient } from './scoring';
@@ -7,7 +7,7 @@ import type { Decision, Post, PostRecord, QuestionsConfig, Thresholds, Verdict }
 export interface Budget {
   /** False once today's token budget is used up. */
   canSpend(): Promise<boolean>;
-  record(inputTokens: number, decision: Decision): Promise<void>;
+  record(inputTokens: number, decision?: Decision): Promise<void>;
 }
 
 export interface ScorerOptions {
@@ -18,6 +18,8 @@ export interface ScorerOptions {
   thresholds: () => Thresholds;
   /** "Account based in" values that are never filtered. */
   allowedCountries?: () => string[];
+  /** Loads a post's photos as data URLs; omit or return [] to score text only. */
+  images?: (post: Post) => Promise<string[]>;
   budget: Budget;
   /** Max d1 requests in flight. d1 takes one post per request, so this is the "batch size". */
   concurrency?: number;
@@ -110,13 +112,50 @@ export class Scorer {
     const client = this.o.client();
     if (!client) return { postId: post.id, decision: 'unscored', reason: 'no_key' };
     if (!(await this.o.budget.canSpend())) return { postId: post.id, decision: 'unscored', reason: 'budget' };
-    const { probs, inputTokens } = await client.score(post, this.o.config.questions);
+    // A failed image download degrades to text-only scoring.
+    const images = post.imageUrls?.length && this.o.images ? await this.o.images(post).catch(() => []) : [];
+    const { probs, inputTokens } = await client.score(post, this.o.config.questions, images);
     const c = combine(probs, this.o.config, this.o.thresholds());
     const rec: PostRecord = { ...this.baseRecord(post), probs, score: c.score, decision: c.decision, reason: 'd1' };
     await this.o.store.putPost(rec);
     await this.o.budget.record(inputTokens, c.decision);
     if (!rescore) await this.bumpAuthor(post.author, c.score);
     return this.verdictFor(rec, 'd1');
+  }
+
+  /**
+   * A post that endorses a bait quote ("this 👆 so true") inherits the quote's score. The stance is
+   * only asked once the quoted post has been scored as bait; until then the post's own score stands
+   * (the content script re-asks when the quote's verdict arrives).
+   */
+  private async withEndorsedQuote(rec: PostRecord, own: Combined): Promise<Combined> {
+    const stance = this.o.config.stance;
+    if (!stance || !rec.quotedId || !rec.quotedText) return own;
+    const quoted = await this.o.store.getPost(rec.quotedId);
+    if (!quoted || quoted.questionsVersion !== this.o.config.version) return own;
+    const t = this.o.thresholds();
+    const q = quoted.reason === 'seeded' ? { score: 1, decision: 'hide' as const } : combine(quoted.probs, this.o.config, t);
+    if (q.score < t.blur || q.score <= own.score) return own;
+    if (rec.endorsesQuote === undefined) {
+      const p = await this.askStance(rec).catch(() => undefined);
+      if (p === undefined) return own;
+      rec.endorsesQuote = p;
+      await this.o.store.putPost(rec);
+    }
+    if (rec.endorsesQuote >= stance.threshold) return { score: q.score, decision: q.decision, topQuestion: 'endorses_quote' };
+    // Replying against a bait quote ("engagement bait, don't reply"): short rebuttals read as bait-ish out of
+    // context, so the author's own words only count when they clear the hide threshold on their own.
+    return own.decision === 'hide' ? own : { ...own, decision: 'show' };
+  }
+
+  private async askStance(rec: PostRecord): Promise<number | undefined> {
+    const client = this.o.client();
+    const stance = this.o.config.stance!;
+    if (!client || !(await this.o.budget.canSpend())) return undefined;
+    const state = { id: rec.id, text: `${rec.text}\n\n[Quoted post]\n${rec.quotedText}`, isReply: false };
+    const { probs, inputTokens } = await client.score(state, [stance]);
+    await this.o.budget.record(inputTokens);
+    return probs[stance.id];
   }
 
   private allowed(): string[] {
@@ -128,6 +167,7 @@ export class Scorer {
       id: post.id,
       text: post.text,
       quotedText: post.quotedText,
+      quotedId: post.quotedId,
       author: post.author ? normHandle(post.author) : undefined,
       seenAt: Date.now(),
       questionsVersion: this.o.config.version,
@@ -135,7 +175,8 @@ export class Scorer {
   }
 
   private async seededAuthor(post: Post): Promise<string | undefined> {
-    for (const h of [post.author, post.quotedAuthor]) {
+    // A quote with a known id is decided on its own (and only its box is blurred).
+    for (const h of [post.author, post.quotedId ? undefined : post.quotedAuthor]) {
       if (!h) continue;
       const a = await this.o.store.getAuthor(normHandle(h));
       if (a?.seeded) return a.handle;
@@ -157,7 +198,7 @@ export class Scorer {
 
   private async verdictFor(rec: PostRecord, reason: Verdict['reason']): Promise<Verdict> {
     // Re-derive the decision from stored probabilities so threshold edits apply to cached posts.
-    const c = rec.reason === 'seeded' ? undefined : combine(rec.probs, this.o.config, this.o.thresholds());
+    const c = rec.reason === 'seeded' ? undefined : await this.withEndorsedQuote(rec, combine(rec.probs, this.o.config, this.o.thresholds()));
     const author = rec.author ? await this.o.store.getAuthor(rec.author) : undefined;
     const v: Verdict = {
       postId: rec.id,

@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 import { IdbStore, openRbf } from './db';
 import { Scorer } from './scorer';
-import { D1Client } from './scoring';
+import { D1Client, imageToDataUrl } from './scoring';
 import { DEFAULT_SETTINGS, QUESTIONS, loadSettings, loadUsage, recordUsage } from './settings';
 import type { AboutInfo } from './country';
 import type { LabelRecord, Post, Settings } from './types';
@@ -30,6 +30,7 @@ async function getScorer(): Promise<Scorer> {
     config: QUESTIONS,
     thresholds: () => settings.thresholds,
     allowedCountries: () => settings.allowedCountries,
+    images: async (post) => (settings.scoreImages ? Promise.all((post.imageUrls ?? []).map((u) => imageToDataUrl(u))) : []),
     budget: {
       canSpend: async () => (await loadUsage()).tokens < settings.dailyTokenBudget,
       record: recordUsage,

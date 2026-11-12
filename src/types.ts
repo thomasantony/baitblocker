@@ -4,6 +4,13 @@ export interface Post {
   author?: string;
   quotedText?: string;
   quotedAuthor?: string;
+  /**
+   * The quoted post's id when known (from X's JSON). The quoted post is then scored on its own,
+   * and this post is scored without it; DOM-scraped posts lack it and are scored with the quote.
+   */
+  quotedId?: string;
+  /** This post's own photo URLs (not the quote's when quotedId is set), sized for scoring. */
+  imageUrls?: string[];
   isReply: boolean;
   /** "parser" when it came from intercepted JSON, "dom" when scraped as a fallback. */
   source?: 'parser' | 'dom';
@@ -23,6 +30,11 @@ export interface QuestionsConfig {
   questions: Question[];
   combine: { max_of: string[]; weighted: Record<string, number> };
   thresholds: Thresholds;
+  /**
+   * Asked (in a second, one-question call) only for posts that quote a post scoring at least the blur
+   * threshold. At or above `threshold`, the quoting post inherits the quoted post's score.
+   */
+  stance?: Question & { threshold: number };
 }
 
 export interface Thresholds {
@@ -34,6 +46,9 @@ export interface PostRecord {
   id: string;
   text: string;
   quotedText?: string;
+  quotedId?: string;
+  /** P(author endorses the quoted post), once asked. */
+  endorsesQuote?: number;
   author?: string;
   seenAt: number;
   probs: Record<string, number>;
@@ -95,6 +110,8 @@ export interface Settings {
   captureFixtures: boolean;
   /** "Account based in" values whose posts are never filtered (case-insensitive). */
   allowedCountries: string[];
+  /** Send attached photos to d1 along with the text. */
+  scoreImages: boolean;
 }
 
 export interface Usage {

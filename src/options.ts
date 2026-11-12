@@ -25,6 +25,7 @@ async function fill() {
   $('enFlag').checked = s.enabled.flag;
   $('capture').checked = s.captureFixtures;
   $('allowed').value = s.allowedCountries.join(', ');
+  $('scoreImages').checked = s.scoreImages;
 }
 
 $('save').addEventListener('click', async () => {
@@ -40,6 +41,7 @@ $('save').addEventListener('click', async () => {
     thresholds: { hide, blur },
     enabled: { pending: $('enPending').checked, hide: $('enHide').checked, blur: $('enBlur').checked, flag: $('enFlag').checked },
     captureFixtures: $('capture').checked,
+    scoreImages: $('scoreImages').checked,
     allowedCountries: $('allowed').value.split(',').map((c) => c.trim()).filter(Boolean),
   });
   status('saveStatus', 'Saved');

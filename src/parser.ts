@@ -29,6 +29,25 @@ function tweetText(tweet: Obj): string {
   return typeof full === 'string' ? full : '';
 }
 
+/** X serves any size of a photo by query string; 360x360 is enough for d1 to read text in images. */
+export const IMAGE_SIZE = '360x360';
+export const MAX_IMAGES = 2;
+
+/** Normalizes a pbs.twimg.com/media URL (any extension or query) to a small JPEG. */
+export function scoringImageUrl(url: string): string | undefined {
+  const m = /^https:\/\/pbs\.twimg\.com\/media\/([A-Za-z0-9_-]+)/.exec(url);
+  return m ? `https://pbs.twimg.com/media/${m[1]}?format=jpg&name=${IMAGE_SIZE}` : undefined;
+}
+
+function photoUrls(tweet: Obj): string[] {
+  const media = tweet.legacy?.extended_entities?.media ?? tweet.legacy?.entities?.media;
+  if (!Array.isArray(media)) return [];
+  return media
+    .filter((m: any) => m?.type === 'photo' && typeof m.media_url_https === 'string')
+    .map((m: any) => scoringImageUrl(m.media_url_https))
+    .filter((u: string | undefined): u is string => !!u);
+}
+
 export function extractPost(tweet: Obj): Post | undefined {
   const id = tweet.rest_id;
   if (typeof id !== 'string' || !id) return undefined;
@@ -39,11 +58,16 @@ export function extractPost(tweet: Obj): Post | undefined {
     isReply: typeof tweet.legacy?.in_reply_to_status_id_str === 'string',
     source: 'parser',
   };
+  const images = photoUrls(tweet);
   const quoted = unwrapTweet(tweet.quoted_status_result?.result);
   if (quoted) {
     post.quotedText = tweetText(quoted);
     post.quotedAuthor = screenName(quoted);
+    // The walk in parse() also emits the quoted tweet as its own post, so it is scored separately.
+    if (typeof quoted.rest_id === 'string' && quoted.rest_id) post.quotedId = quoted.rest_id;
+    else images.push(...photoUrls(quoted));
   }
+  if (images.length) post.imageUrls = [...new Set(images)].slice(0, MAX_IMAGES);
   return post;
 }
 
