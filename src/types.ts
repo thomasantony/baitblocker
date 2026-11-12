@@ -105,7 +105,7 @@ export interface Settings {
   apiKey: string;
   model: string;
   thresholds: Thresholds;
-  enabled: { pending: boolean; hide: boolean; blur: boolean; flag: boolean };
+  enabled: { pending: boolean; hide: boolean; blur: boolean };
   dailyTokenBudget: number;
   captureFixtures: boolean;
   /** "Account based in" values whose posts are never filtered (case-insensitive). */

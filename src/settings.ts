@@ -7,7 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
   model: 'd1.1',
   thresholds: { ...QUESTIONS.thresholds },
-  enabled: { pending: true, hide: true, blur: true, flag: true },
+  enabled: { pending: true, hide: true, blur: true },
   dailyTokenBudget: 1_000_000,
   captureFixtures: false,
   allowedCountries: ['United States', 'North America'],

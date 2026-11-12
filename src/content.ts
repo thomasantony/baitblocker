@@ -29,8 +29,10 @@ function requestVerdict(post: Post) {
   chrome.runtime
     .sendMessage({ type: 'score', post })
     .then((v: Verdict | undefined) => {
-      if (v?.needsCountry) return awaitCountry(post.id, v.needsCountry);
+      // Bait waiting on its author's country is blurred provisionally (see stateFor) until the lookup lands.
       verdicts.set(post.id, v ?? { postId: post.id, decision: 'unscored', reason: 'error' });
+      if (v?.needsCountry) return awaitCountry(post.id, v.needsCountry), schedule();
+      warnSkipped(v);
       reaskQuoters(post.id);
       schedule();
     })
@@ -39,6 +41,20 @@ function requestVerdict(post: Post) {
       verdicts.set(post.id, { postId: post.id, decision: 'unscored', reason: 'error' });
       schedule();
     });
+}
+
+const warned = new Set<string>();
+/** Scoring skipped for a reason the user can fix: say so once per page instead of failing silently. */
+function warnSkipped(v: Verdict | undefined) {
+  const reason = v?.decision === 'unscored' ? v.reason : undefined;
+  if (!reason || warned.has(reason)) return;
+  warned.add(reason);
+  const why: Record<string, string> = {
+    budget: "today's d1 token budget is used up (raise it in settings)",
+    no_key: 'no d1 API key is set (add it in settings)',
+    error: 'scoring failed (see the service worker console in chrome://extensions)',
+  };
+  if (why[reason]) console.warn(`[baitblocker] Posts are shown unscored: ${why[reason]}.`);
 }
 
 /** Posts quoting `quotedId` may now inherit its score (if they endorse it): ask again (answered from cache). */
@@ -71,7 +87,7 @@ async function onCountryResult(handle: string, result: LookupResult) {
       if (p) requestVerdict(p);
     }
   } else {
-    console.debug('[baitblocker] country lookup failed', handle, result.error);
+    console.warn('[baitblocker] country lookup failed', handle, result.error);
     if (result.error === 'stale_query') console.info('[baitblocker] Open any profile\'s "About this account" page once so the extension can learn X\'s new query id.');
     for (const id of waiting) verdicts.set(id, { postId: id, decision: 'unscored', reason: 'error' });
   }
@@ -167,7 +183,9 @@ function stateFor(id: string): { state: State; v?: Verdict } {
   const v = verdicts.get(id);
   const en = settings?.enabled;
   if (!v) return { state: en?.pending === false ? 'show' : 'pending' };
-  if (revealed.has(id) || v.decision === 'unscored') return { state: 'show', v };
+  if (revealed.has(id)) return { state: 'show', v };
+  if (v.needsCountry) return { state: en?.blur === false ? 'pending' : 'blur', v };
+  if (v.decision === 'unscored') return { state: 'show', v };
   let d: State = v.decision;
   if (d === 'hide' && en?.hide === false) d = 'blur';
   if (d === 'blur' && en?.blur === false) d = 'show';
@@ -219,6 +237,7 @@ function reasonName(v: Verdict): string {
 }
 
 function metaText(v: Verdict): string {
+  if (v.needsCountry) return `${reasonName(v)} ${(v.score ?? 0).toFixed(2)} · checking where @${v.needsCountry} is based…`;
   const parts = [`${reasonName(v)} ${(v.score ?? 0).toFixed(2)}`];
   if (v.author) parts.push(`@${v.author}`);
   if (v.country) parts.push(`based in ${v.country}`);
@@ -283,23 +302,6 @@ function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
   } else if (state === 'blur' && v) {
     // Controls sit in their own bar above the post so they never cover the text; hovering the post peeks.
     article.prepend(blurBar(id, v, 'Blurred'));
-  } else if (state === 'show' && settings?.enabled.flag !== false) {
-    const flag = swallow(el('div', 'bb-ui bb-flag'));
-    const toggle = button('⚑', () => flag.classList.toggle('bb-open'));
-    toggle.title = 'Label this post';
-    const menu = el('div', 'bb-menu');
-    for (const label of ['ragebait'] as const) {
-      menu.append(
-        button('bait', () => {
-          sendLabel(id, label, 'user_button');
-          flag.classList.remove('bb-open');
-          flag.classList.add('bb-done');
-          toggle.textContent = '✓';
-        }),
-      );
-    }
-    flag.append(toggle, menu);
-    article.prepend(flag);
   }
 }
 
@@ -320,7 +322,7 @@ function pass() {
     const q = qid ? quoteStateFor(qid) : undefined;
     const key = `${id}:${state}:${q?.state ?? ''}`;
     // Recycled elements get a new id, so the key changes and stale UI is cleared before re-rendering.
-    const needsUi = state === 'hide' || state === 'blur' || (state === 'show' && settings?.enabled.flag !== false);
+    const needsUi = state === 'hide' || state === 'blur';
     const quoteOk = q?.state !== 'qblur' || !!article.querySelector('.bb-qbar') || !quoteBox(article);
     if (rendered.get(article) === key && (!needsUi || article.querySelector(':scope > .bb-ui')) && quoteOk) continue;
     render(article, id, state, v);
@@ -343,7 +345,7 @@ function schedule() {
 
 const CSS = `
 article.bb-pending { opacity: .5; }
-article.bb-hide, article.bb-blur, article.bb-show { position: relative; }
+article.bb-hide, article.bb-blur { position: relative; }
 /* X lays the article out as a flex row; stack our bar above the post instead of squeezing it sideways. */
 article.bb-hide, article.bb-blur { flex-direction: column !important; }
 article.bb-hide > .bb-ui, article.bb-blur > .bb-ui { align-self: stretch; }
@@ -357,14 +359,9 @@ article.bb-blur:hover > :not(.bb-ui) { filter: none; transition-delay: .4s; }
 .bb-btn:hover { background: rgba(29,155,240,.85); border-color: transparent; }
 .bb-blurbar .bb-btn { padding: 1px 10px; }
 .bb-bar:not(.bb-blurbar) .bb-btn, .bb-bar .bb-btn.bb-link { background: transparent; color: rgb(29,155,240); border-color: transparent; padding: 0 0 0 4px; }
-.bb-flag { position: absolute; top: 10px; right: 52px; z-index: 2; display: flex; gap: 4px; opacity: 0; transition: opacity .1s; }
-article:hover > .bb-flag, .bb-flag.bb-open, .bb-flag.bb-done { opacity: 1; }
-.bb-flag > .bb-btn { padding: 0 6px; }
 .bb-qpending { opacity: .5; }
 .bb-qblur { filter: blur(10px); pointer-events: none; user-select: none; }
 .bb-qbar { padding: 6px 0; }
-.bb-menu { display: none; gap: 4px; }
-.bb-flag.bb-open .bb-menu { display: flex; }
 `;
 
 function boot() {

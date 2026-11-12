@@ -30,7 +30,7 @@ Steps:
 
 3. Click the extension's toolbar icon (pin it from the puzzle-piece menu if it is hidden). The settings page opens. Paste your Liquid API key and click **Save**.
 
-4. Open or reload x.com. Posts are dimmed briefly while they are scored, then shown, blurred, or collapsed into a one-line "Hidden" bar with a **show** button.
+4. Open or reload x.com. Posts are dimmed briefly while they are scored, then shown, blurred, or collapsed into a one-line "Hidden" bar with a **show** button. A post that scores as bait is blurred with "checking where @… is based" until its author's country is known.
 
 ### Updating
 
@@ -58,7 +58,7 @@ Click **Remove** on the extension's card in `chrome://extensions`. That deletes 
 - **d1 API key, model and daily token budget.** Scoring stops for the day once the budget is used up, and posts are shown unscored.
 - **Countries never filtered.** Defaults to `United States, North America`, matching what X shows on About pages.
 - **Thresholds.** Defaults: hide at 0.8 or above, blur from 0.5.
-- **UI toggles**: dim while scoring, hide, blur, the flag button on shown posts, and whether attached photos are sent.
+- **UI toggles**: dim while scoring, hide, blur, and whether attached photos are sent.
 - **Seed blocked accounts**: import handles (JSON or CSV) whose posts are always hidden.
 - **Export** of your labels and cached authors, for tuning.
 
@@ -83,7 +83,8 @@ Click **Remove** on the extension's card in `chrome://extensions`. That deletes 
 ## Troubleshooting
 
 - **Nothing happens.** Check that the API key is saved, that you are logged in to x.com, and that you reloaded the tab after installing or updating.
-- **Posts stay dimmed for a long time.** The country lookup limit is probably used up. It resets within 15 minutes, and cached authors are not looked up again.
+- **Posts stay blurred with "checking where @… is based".** The country lookup limit (about 50 per 15 minutes) is used up, which happens mostly while the cache is empty. It resets within 15 minutes; the newest posts are looked up first, and cached authors are not looked up again.
+- **Nothing is blurred or hidden at all.** Open the x.com tab's console: a `[baitblocker] Posts are shown unscored: …` warning names the cause (daily token budget used up, no API key, or d1 errors).
 - **Country lookups fail.** X changes the lookup request's id when it deploys. Open any profile's "About this account" page once and the extension picks up the new id. The page console shows `[baitblocker] country lookup failed … stale_query` while this is the cause.
 
 ## Development

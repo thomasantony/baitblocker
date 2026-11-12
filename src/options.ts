@@ -22,7 +22,6 @@ async function fill() {
   $('enPending').checked = s.enabled.pending;
   $('enHide').checked = s.enabled.hide;
   $('enBlur').checked = s.enabled.blur;
-  $('enFlag').checked = s.enabled.flag;
   $('capture').checked = s.captureFixtures;
   $('allowed').value = s.allowedCountries.join(', ');
   $('scoreImages').checked = s.scoreImages;
@@ -39,7 +38,7 @@ $('save').addEventListener('click', async () => {
     model: $<HTMLSelectElement>('model').value,
     dailyTokenBudget: Number($('budget').value) || 0,
     thresholds: { hide, blur },
-    enabled: { pending: $('enPending').checked, hide: $('enHide').checked, blur: $('enBlur').checked, flag: $('enFlag').checked },
+    enabled: { pending: $('enPending').checked, hide: $('enHide').checked, blur: $('enBlur').checked },
     captureFixtures: $('capture').checked,
     scoreImages: $('scoreImages').checked,
     allowedCountries: $('allowed').value.split(',').map((c) => c.trim()).filter(Boolean),

@@ -62,7 +62,7 @@ export interface FetcherDeps {
 }
 
 /**
- * One request at a time, spaced out, pausing until X's rate-limit reset when the
+ * One request at a time, newest request first, spaced out, pausing until X's rate-limit reset when the
  * window (50 per 15 min at the time of writing) is nearly used up.
  */
 export class CountryFetcher {
@@ -96,10 +96,11 @@ export class CountryFetcher {
       while (this.queue.length) {
         const wait = this.resumeAt - this.now();
         if (wait > 0) await this.sleep(wait);
-        const job = this.queue.shift()!;
+        // Newest first: the posts the user just scrolled to matter more than ones scrolled past.
+        const job = this.queue.pop()!;
         const r = await this.once(job.handle);
         if (!r.ok && r.error === 'rate_limited') {
-          this.queue.unshift(job);
+          this.queue.push(job);
           continue;
         }
         job.resolve(r);
