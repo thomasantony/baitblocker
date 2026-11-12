@@ -1,13 +1,14 @@
 {
   "name": "baitblocker",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "package": "node build.mjs && node package.mjs"
   },
   "dependencies": {
     "idb": "^8.0.4"
@@ -19,5 +20,12 @@
     "fake-indexeddb": "^6.2.7",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "fsevents": false
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

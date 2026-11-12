@@ -9,12 +9,10 @@ interface BaitSchema extends DBSchema {
 export type BaitDB = IDBPDatabase<BaitSchema>;
 
 export function openDb(name = 'baitblocker'): Promise<BaitDB> {
-  return openDB<BaitSchema>(name, 3, {
+  return openDB<BaitSchema>(name, 1, {
     upgrade(db) {
-      // v3 dropped the labels and authors stores of the earlier design.
-      for (const name of ['labels', 'authors']) if (db.objectStoreNames.contains(name as never)) db.deleteObjectStore(name as never);
-      if (!db.objectStoreNames.contains('posts')) db.createObjectStore('posts', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('countries')) db.createObjectStore('countries', { keyPath: 'handle' });
+      db.createObjectStore('posts', { keyPath: 'id' });
+      db.createObjectStore('countries', { keyPath: 'handle' });
     },
   });
 }

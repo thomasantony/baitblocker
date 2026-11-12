@@ -67,7 +67,7 @@ chrome.action?.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 // working without a reload (the old content script notices it is orphaned and stops).
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason !== 'install' && reason !== 'update') return;
-  indexedDB.deleteDatabase('baitblocker-debug'); // left by earlier versions
+  if (reason === 'install' && !(await loadSettings()).apiKey) chrome.runtime.openOptionsPage();
   for (const tab of await chrome.tabs.query({ url: 'https://x.com/*' })) {
     if (tab.id === undefined) continue;
     try {

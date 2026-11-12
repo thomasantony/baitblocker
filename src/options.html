@@ -26,9 +26,10 @@
 <div class="muted">Hides US-politics, capitalism/socialism and anti-tech bait from accounts based outside the US.</div>
 
 <h2>d1 API</h2>
+<div id="keyHint" class="muted" hidden>BaitBlocker does nothing until it has a Liquid AI API key. Create one from the <a href="https://docs.liquid.ai" target="_blank" rel="noopener">Liquid AI developer docs</a>, paste it below and click Save.</div>
 <label>API key <input id="apiKey" type="password" autocomplete="off" placeholder="liquid_…"></label>
+<button id="testKey">Test key</button><span id="testStatus" class="status"></span>
 <div class="row">
-  <label>Model <select id="model"><option value="d1.1">d1.1</option><option value="d1-ultra">d1-ultra</option></select></label>
   <label>Daily input-token budget <input id="budget" type="number" min="0" step="10000"></label>
 </div>
 <label><input id="scoreImages" type="checkbox"> Send attached photos to d1 (about 180 extra input tokens per photo)</label>

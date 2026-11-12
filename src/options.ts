@@ -1,10 +1,11 @@
 import { openDb } from './db';
-import { loadSettings, loadUsage, saveSettings } from './settings';
+import { D1Client } from './scoring';
+import { DEFAULT_SETTINGS, QUESTIONS, loadSettings, loadUsage, recordUsage, saveSettings } from './settings';
 
 const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
 
-function status(msg: string, ok = true) {
-  const n = $('saveStatus');
+function status(msg: string, ok = true, id = 'saveStatus') {
+  const n = $(id);
   n.textContent = msg;
   n.className = `status ${ok ? 'ok' : 'err'}`;
 }
@@ -12,7 +13,7 @@ function status(msg: string, ok = true) {
 async function fill() {
   const s = await loadSettings();
   $('apiKey').value = s.apiKey;
-  $<HTMLSelectElement>('model').value = s.model;
+  $('keyHint').hidden = !!s.apiKey;
   $('budget').value = String(s.dailyTokenBudget);
   $('scoreImages').checked = s.scoreImages;
   $('allowed').value = s.allowedCountries.join(', ');
@@ -26,13 +27,31 @@ $('save').addEventListener('click', async () => {
   if (!(blur >= 0 && hide <= 1 && blur <= hide)) return status('Need 0 ≤ blur ≤ hide ≤ 1', false);
   await saveSettings({
     apiKey: $('apiKey').value.trim(),
-    model: $<HTMLSelectElement>('model').value,
+    model: DEFAULT_SETTINGS.model,
     dailyTokenBudget: Number($('budget').value) || 0,
     scoreImages: $('scoreImages').checked,
     allowedCountries: $('allowed').value.split(',').map((c) => c.trim()).filter(Boolean),
     thresholds: { hide, blur },
   });
   status('Saved');
+  $('keyHint').hidden = !!$('apiKey').value.trim();
+});
+
+// One tiny single-question call, counted against today's budget like any other.
+$('testKey').addEventListener('click', async () => {
+  const key = $('apiKey').value.trim();
+  if (!key) return status('Paste a key first', false, 'testStatus');
+  status('Testing…', true, 'testStatus');
+  try {
+    const client = new D1Client(key, DEFAULT_SETTINGS.model);
+    const r = await client.score({ id: 'test', text: 'Hello world' }, [QUESTIONS.questions[0]]);
+    await recordUsage(r.inputTokens);
+    status('Key works', true, 'testStatus');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const hint = /HTTP 40[13]/.test(msg) ? ' (key rejected)' : '';
+    status(`Failed: ${msg}${hint}`, false, 'testStatus');
+  }
 });
 
 async function stats() {

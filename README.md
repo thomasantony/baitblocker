@@ -2,14 +2,14 @@
 
 A personal Chrome extension for x.com. It hides US-politics, capitalism/socialism and anti-tech bait posted by accounts based outside the US: the minimum wage in dollars, US healthcare and taxes, Democrats vs Republicans, capitalism vs socialism, "nobody wants self-driving cars", and similar engagement farming.
 
-It is not published on the Chrome Web Store. You build it from source and load it as an unpacked extension (steps below).
+It is not published on the Chrome Web Store. You load it as an unpacked extension, either from a prebuilt zip on the [Releases page](https://github.com/thomasantony/baitblocker/releases) or built from source (steps below). MIT licensed; see [LICENSE](LICENSE).
 
 ## Install in Chrome
 
 You need:
 
 - **Chrome** (or another Chromium browser such as Edge, Brave or Arc).
-- **Node.js** (a recent LTS release) and **git**, to build the extension.
+- To build from source: **Node.js** 20 or newer and **git**. Not needed if you use a release zip.
 - A **Liquid AI API key** for the d1 decision model. Create one from Liquid AI's developer docs at [docs.liquid.ai](https://docs.liquid.ai). Billing is per input token; see [liquid.ai/pricing](https://www.liquid.ai/pricing).
 
   > **Cost:** as of November 2026, a new Liquid Console organization gets $2 of free credit, and d1.1 costs $0.02 per million input tokens (output is free). That is about 100 million input tokens. A scored post typically takes somewhere around 500–1,500, more with photos, so the free credit should cover well over 50,000 scored posts: months to years of normal scrolling. The default daily budget of 1M tokens caps spending at about $0.02 a day. Check [liquid.ai/pricing](https://www.liquid.ai/pricing) for current terms.
@@ -17,24 +17,29 @@ You need:
 
 Steps:
 
-1. Get the code and build it:
+1. Get the extension, either way:
 
-   ```bash
-   git clone <this repository's URL> baitblocker
-   cd baitblocker
-   npm install
-   npm run build
-   ```
+   - **Prebuilt:** download `baitblocker-<version>.zip` from the [latest release](https://github.com/thomasantony/baitblocker/releases/latest) and unzip it. The unzipped folder is the extension.
+   - **From source:**
 
-   This creates a `dist/` folder, which is the extension.
+     ```bash
+     git clone https://github.com/thomasantony/baitblocker.git
+     cd baitblocker
+     npm install
+     npm run build
+     ```
 
-2. Open `chrome://extensions`, turn on **Developer mode** (top right), click **Load unpacked**, and choose the `dist/` folder.
+     This creates a `dist/` folder, which is the extension. `package.json` lists which dependencies may run install scripts (`allowScripts`), so npm 11 should not warn about them; on older npm the list is ignored and has no effect.
 
-3. Click the extension's toolbar icon (pin it from the puzzle-piece menu if it is hidden). The settings page opens. Paste your Liquid API key and click **Save**.
+2. Open `chrome://extensions`, turn on **Developer mode** (top right), click **Load unpacked**, and choose the unzipped folder or `dist/`.
+
+3. The settings page opens on first install. (Later, click the extension's toolbar icon to open it; pin it from the puzzle-piece menu if it is hidden.) Paste your Liquid API key, click **Test key** to check it, then **Save**.
 
 4. Open or reload x.com. Posts are dimmed briefly while they are scored, then shown, blurred, or collapsed into a one-line "Hidden" bar with a **show** button. A post that scores as bait stays visible until its author's country is known, then is hidden or blurred if the author is based outside the US.
 
 ### Updating
+
+With a release zip, download and unzip the new one over the old folder. From source:
 
 ```bash
 git pull
@@ -42,7 +47,7 @@ npm install
 npm run build
 ```
 
-Then click the reload icon on the extension's card in `chrome://extensions`. Open x.com tabs pick up the new version automatically; if one doesn't, reload it.
+Either way, then click the reload icon on the extension's card in `chrome://extensions`. Open x.com tabs pick up the new version automatically; if one doesn't, reload it.
 
 ### Uninstalling
 
@@ -58,7 +63,7 @@ Click **Remove** on the extension's card in `chrome://extensions`. That deletes 
 
 ## Settings
 
-- **d1 API key, model and daily token budget.** Scoring stops for the day once the budget is used up, and posts are shown unscored.
+- **d1 API key and daily token budget.** The extension uses the `d1.1` model. **Test key** makes one tiny d1 call to check the key. Scoring stops for the day once the budget is used up, and posts are shown unscored.
 - **Send attached photos.** On by default.
 - **Countries never filtered.** Defaults to `United States, North America`, matching what X shows on About pages.
 - **Thresholds.** Defaults: hide at 0.8 or above, blur from 0.5.
@@ -86,7 +91,7 @@ The page also shows today's token use and how many posts and countries are cache
 
 ## Troubleshooting
 
-- **Nothing happens.** Check that the API key is saved, that you are logged in to x.com, and that you reloaded the tab after installing or updating.
+- **Nothing happens.** Check that the API key is saved (**Test key** on the settings page), that you are logged in to x.com, and that you reloaded the tab after installing or updating.
 - **Bait isn't filtered right away.** Its author's country is still being looked up. If the lookup limit (about 50 per 15 minutes) is used up, which happens mostly while the cache is empty, posts stay visible until it resets within 15 minutes. Only hide-level posts on screen use lookups, and cached authors are not looked up again.
 - **Nothing is blurred or hidden at all.** Open the x.com tab's console: a `[baitblocker] Posts are shown unscored: …` warning names the cause (daily token budget used up, no API key, or d1 errors).
 - **Country lookups fail.** X changes the lookup request's id when it deploys. Open any profile's "About this account" page once and the extension picks up the new id. The page console shows `[baitblocker] country lookup failed … stale_query` while this is the cause.
@@ -97,6 +102,9 @@ The page also shows today's token use and how many posts and countries are cache
 npm run watch      # rebuild dist/ on change
 npm test           # vitest
 npm run typecheck
+npm run package    # build, then zip dist/ into baitblocker-<version>.zip for a release
 ```
+
+To release, bump `version` in both `manifest.json` and `package.json`, run `npm run package`, and attach the zip to a GitHub release.
 
 `fixtures/synthetic-*.json` are hand-made GraphQL responses used by the parser tests.
