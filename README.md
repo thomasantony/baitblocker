@@ -68,7 +68,7 @@ The page also shows today's token use and how many posts and countries are cache
 ## How it decides
 
 1. **Topic.** d1 answers three yes/no questions about each post's own text and photos (`config/questions.json`):
-   - `us_politics`: US politics or economics written as if the author lives in the US.
+   - `us_politics`: US politics or public policy (wages, prices, healthcare, taxes) written as if the author lives in the US. Investing and company talk don't count.
    - `ideology_bait`: a sweeping, slogan-style take on capitalism, socialism, billionaires or the rich.
    - `anti_tech`: a sweeping claim against modern technology ("nobody wants self-driving cars"). Pro-technology takes, including ones mocking its critics, don't count.
 
