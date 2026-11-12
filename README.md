@@ -1,6 +1,6 @@
 # BaitBlocker
 
-A personal Chrome extension for x.com. It hides US-politics and ideology bait posted by accounts based outside the US: the minimum wage in dollars, US healthcare and taxes, Democrats vs Republicans, capitalism vs socialism, "nobody wants self-driving cars", and similar engagement farming.
+A personal Chrome extension for x.com. It hides US-politics, capitalism/socialism and anti-tech bait posted by accounts based outside the US: the minimum wage in dollars, US healthcare and taxes, Democrats vs Republicans, capitalism vs socialism, "nobody wants self-driving cars", and similar engagement farming.
 
 It is not published on the Chrome Web Store. You build it from source and load it as an unpacked extension (steps below).
 
@@ -65,11 +65,12 @@ The page also shows today's token use and how many posts and countries are cache
 
 ## How it decides
 
-1. **Topic.** d1 answers two yes/no questions about each post's own text and photos (`config/questions.json`):
+1. **Topic.** d1 answers three yes/no questions about each post's own text and photos (`config/questions.json`):
    - `us_politics`: US politics or economics written as if the author lives in the US.
-   - `ideology_bait`: a sweeping, slogan-style take on capitalism, socialism, the rich, or modern technology.
+   - `ideology_bait`: a sweeping, slogan-style take on capitalism, socialism, billionaires or the rich.
+   - `anti_tech`: a sweeping claim against modern technology ("nobody wants self-driving cars"). Pro-technology takes, including ones mocking its critics, don't count.
 
-   The topic score is the higher of the two.
+   The topic score is the highest of the three.
 2. **Country.** Only when the topic score reaches the blur threshold, the extension looks up the author's "Account based in" (X's `AboutAccountQuery`). Results are cached for 30 days, or 1 day when X has no value. X allows about 50 lookups per 15 minutes, so requests are spaced out and pause when the limit is close.
 3. **Decision.** Authors based in an allowed country are shown. Anywhere else, the post is hidden or blurred by its topic score. Authors already cached as US-based skip d1 entirely.
 

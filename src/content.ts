@@ -16,7 +16,8 @@ const FALLBACK_DELAY_MS = 400;
 /** Names for the question that decided a post. */
 const REASONS: Record<string, string> = {
   us_politics: 'US-politics bait',
-  ideology_bait: 'ideology bait',
+  ideology_bait: 'capitalism/socialism bait',
+  anti_tech: 'anti-tech bait',
   endorses_quote: 'endorses quoted bait',
 };
 
