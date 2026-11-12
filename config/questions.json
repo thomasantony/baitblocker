@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "questions": [
     {
       "id": "us_politics",
@@ -7,7 +7,7 @@
     },
     {
       "id": "ideology_bait",
-      "text": "Is the main subject of this post (including any text in attached images) capitalism vs socialism, billionaires or \"eat the rich\", or the rich vs the working class, and is it a sweeping slogan or bold claim designed to farm replies rather than a specific argument? Answer no when the post is mainly about something else (technology, AI, science, sports, a product), including predictions that technology will make people richer, and for specific, substantive arguments, news, or personal anecdotes."
+      "text": "Is the main subject of this post (including any text in attached images) capitalism vs socialism, billionaires or \"eat the rich\", or the rich vs the working class, and is it a sweeping slogan or bold claim designed to farm replies rather than a specific argument? Answer no when the post is mainly about something else (technology, AI, science, sports, a product, war, geopolitics, or countries and their relations, including memes about nations), including predictions that technology will make people richer, and for specific, substantive arguments, news, or personal anecdotes."
     },
     {
       "id": "anti_tech",
