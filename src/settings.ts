@@ -10,21 +10,24 @@ export const DEFAULT_SETTINGS: Settings = {
   enabled: { pending: true, hide: true, blur: true, flag: true },
   dailyTokenBudget: 1_000_000,
   captureFixtures: false,
+  allowedCountries: ['United States', 'North America'],
 };
 
 export async function loadSettings(): Promise<Settings> {
   const { settings } = await chrome.storage.local.get('settings');
-  const s = (settings ?? {}) as Partial<Settings>;
+  const s = (settings ?? {}) as Partial<Settings> & { thresholdsFor?: number };
+  // Thresholds are tuned per question set, so saved ones only apply to the version they were saved under.
+  const saved = s.thresholdsFor === QUESTIONS.version ? s.thresholds : undefined;
   return {
     ...DEFAULT_SETTINGS,
     ...s,
-    thresholds: { ...DEFAULT_SETTINGS.thresholds, ...s.thresholds },
+    thresholds: { ...DEFAULT_SETTINGS.thresholds, ...saved },
     enabled: { ...DEFAULT_SETTINGS.enabled, ...s.enabled },
   };
 }
 
 export async function saveSettings(s: Settings): Promise<void> {
-  await chrome.storage.local.set({ settings: s });
+  await chrome.storage.local.set({ settings: { ...s, thresholdsFor: QUESTIONS.version } });
 }
 
 export const today = () => new Date().toLocaleDateString('en-CA');

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Ragebait Filter (v0)",
-  "version": "0.0.1",
-  "description": "Scores x.com posts with Liquid AI d1 and hides or blurs ragebait.",
+  "name": "Antirage: foreign US-bait filter",
+  "version": "0.1.0",
+  "description": "Hides US-politics and ideology bait from accounts based outside the US.",
   "permissions": ["storage"],
   "host_permissions": ["https://x.com/*", "https://api.liquid.ai/*"],
   "background": { "service_worker": "background.js" },

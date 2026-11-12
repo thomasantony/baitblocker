@@ -1,4 +1,5 @@
 // Isolated-world content script: matches DOM posts to verdicts and renders UI states.
+import type { LookupResult } from './country';
 import { loadSettings } from './settings';
 import { MSG_NS, type LabelValue, type Post, type Settings, type Verdict } from './types';
 
@@ -12,10 +13,11 @@ let settings: Settings | undefined;
 const FALLBACK_DELAY_MS = 400;
 /** Questions named in the UI when they are the top reason; everything else shows as "ragebait". */
 const NAMED: Record<string, string> = {
-  slurs: 'slurs',
-  outgroup_contempt: 'outgroup contempt',
-  anticapitalist_slogans: 'anti-capitalist slogans',
+  us_politics: 'US-politics bait',
+  ideology_bait: 'ideology bait',
 };
+/** Handles whose country lookup is in flight, mapped to the posts waiting on it. */
+const countryWaiters = new Map<string, Set<string>>();
 
 // ---------- messaging ----------
 
@@ -25,6 +27,7 @@ function requestVerdict(post: Post) {
   chrome.runtime
     .sendMessage({ type: 'score', post })
     .then((v: Verdict | undefined) => {
+      if (v?.needsCountry) return awaitCountry(post.id, v.needsCountry);
       verdicts.set(post.id, v ?? { postId: post.id, decision: 'unscored', reason: 'error' });
       schedule();
     })
@@ -33,6 +36,34 @@ function requestVerdict(post: Post) {
       verdicts.set(post.id, { postId: post.id, decision: 'unscored', reason: 'error' });
       schedule();
     });
+}
+
+/** Leaves the post pending (dimmed) until the page script has fetched the author's country. */
+function awaitCountry(postId: string, handle: string) {
+  let waiting = countryWaiters.get(handle);
+  if (!waiting) {
+    countryWaiters.set(handle, (waiting = new Set()));
+    window.postMessage({ ns: MSG_NS, type: 'lookupCountry', handle }, location.origin);
+  }
+  waiting.add(postId);
+}
+
+async function onCountryResult(handle: string, result: LookupResult) {
+  const waiting = countryWaiters.get(handle) ?? new Set<string>();
+  countryWaiters.delete(handle);
+  if (result.ok) {
+    await chrome.runtime.sendMessage({ type: 'country', handle, info: result.info }).catch(() => {});
+    for (const id of waiting) {
+      requested.delete(id);
+      const p = posts.get(id);
+      if (p) requestVerdict(p);
+    }
+  } else {
+    console.debug('[rbf] country lookup failed', handle, result.error);
+    if (result.error === 'stale_query') console.info('[rbf] Open any profile\'s "About this account" page once so the extension can learn X\'s new query id.');
+    for (const id of waiting) verdicts.set(id, { postId: id, decision: 'unscored', reason: 'error' });
+  }
+  schedule();
 }
 
 function sendLabel(postId: string, label: LabelValue, source: 'user_button' | 'show_click') {
@@ -47,6 +78,8 @@ window.addEventListener('message', (e) => {
       requestVerdict(p);
     }
     schedule();
+  } else if (e.data.type === 'countryResult' && typeof e.data.handle === 'string') {
+    onCountryResult(e.data.handle, e.data.result as LookupResult);
   } else if (e.data.type === 'capture') {
     chrome.runtime.sendMessage({ type: 'capture', url: e.data.url, body: e.data.body }).catch(() => {});
   }
@@ -63,6 +96,7 @@ chrome.storage.onChanged.addListener((changes) => {
     // thresholds may have changed: re-ask; the background answers cached posts from stored probabilities
     verdicts.clear();
     requested.clear();
+    countryWaiters.clear();
     for (const p of posts.values()) requestVerdict(p);
     schedule();
   });
@@ -156,7 +190,7 @@ function reasonName(v: Verdict): string {
 function metaText(v: Verdict): string {
   const parts = [`${reasonName(v)} ${(v.score ?? 0).toFixed(2)}`];
   if (v.author) parts.push(`@${v.author}`);
-  if (v.authorScore !== undefined) parts.push(`author ${v.authorScore.toFixed(2)}`);
+  if (v.country) parts.push(`based in ${v.country}`);
   return parts.join(' · ');
 }
 
@@ -182,9 +216,9 @@ function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
     // Controls sit in their own bar above the post so they never cover the text; hovering the post peeks.
     const bar = swallow(el('div', 'rbf-ui rbf-bar rbf-blurbar'));
     bar.append(el('span', 'rbf-meta', `Blurred · ${metaText(v)}`));
-    for (const label of ['ragebait', 'racist', 'fine'] as const) {
+    for (const label of ['ragebait', 'fine'] as const) {
       bar.append(
-        button(label, () => {
+        button(label === 'ragebait' ? 'bait' : label, () => {
           sendLabel(id, label, 'user_button');
           reveal(id);
         }),
@@ -199,9 +233,9 @@ function render(article: HTMLElement, id: string, state: State, v?: Verdict) {
     const toggle = button('⚑', () => flag.classList.toggle('rbf-open'));
     toggle.title = 'Label this post';
     const menu = el('div', 'rbf-menu');
-    for (const label of ['ragebait', 'racist'] as const) {
+    for (const label of ['ragebait'] as const) {
       menu.append(
-        button(label, () => {
+        button('bait', () => {
           sendLabel(id, label, 'user_button');
           flag.classList.remove('rbf-open');
           flag.classList.add('rbf-done');

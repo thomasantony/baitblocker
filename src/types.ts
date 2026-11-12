@@ -70,7 +70,20 @@ export interface Verdict {
   topQuestion?: string;
   author?: string;
   authorScore?: number;
-  reason?: 'seeded' | 'd1' | 'cache' | 'budget' | 'no_key' | 'error';
+  reason?: 'seeded' | 'd1' | 'cache' | 'budget' | 'no_key' | 'error' | 'country';
+  /** The author's "Account based in" value, when known. */
+  country?: string;
+  /** Set (with decision "unscored") when the topic fired and the author's country must be looked up first. */
+  needsCountry?: string;
+}
+
+/** Cached "About this account" result. `country` is undefined when X returned nothing. */
+export interface CountryRecord {
+  handle: string;
+  country?: string;
+  /** X's location_accurate flag (false hints at a VPN/proxy). */
+  accurate?: boolean;
+  fetchedAt: number;
 }
 
 export interface Settings {
@@ -80,6 +93,8 @@ export interface Settings {
   enabled: { pending: boolean; hide: boolean; blur: boolean; flag: boolean };
   dailyTokenBudget: number;
   captureFixtures: boolean;
+  /** "Account based in" values whose posts are never filtered (case-insensitive). */
+  allowedCountries: string[];
 }
 
 export interface Usage {

@@ -24,12 +24,16 @@
 </head>
 <body>
 <h1>Ragebait Filter</h1>
-<div class="muted">v0 · scores x.com posts with Liquid AI d1</div>
+<div class="muted">Flags US-politics and ideology bait from accounts based outside the US (d1 for topic, X's "Account based in" for country)</div>
 
 <h2>d1 API</h2>
 <label>API key <input id="apiKey" type="password" autocomplete="off" placeholder="liquid_…"></label>
 <label>Model <select id="model"><option value="d1.1">d1.1</option><option value="d1-ultra">d1-ultra</option></select></label>
 <label>Daily input-token budget <input id="budget" type="number" min="0" step="10000"></label>
+
+<h2>Countries</h2>
+<label>Never filter accounts based in (comma-separated, as X shows them) <input id="allowed" type="text" style="width:100%;box-sizing:border-box"></label>
+<p class="muted">Lookups are cached 30 days and only made when a post's topic score clears the blur threshold (X allows ~50 per 15 min).</p>
 
 <h2>Thresholds &amp; UI</h2>
 <div class="row">

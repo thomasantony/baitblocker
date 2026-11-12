@@ -24,6 +24,7 @@ async function fill() {
   $('enBlur').checked = s.enabled.blur;
   $('enFlag').checked = s.enabled.flag;
   $('capture').checked = s.captureFixtures;
+  $('allowed').value = s.allowedCountries.join(', ');
 }
 
 $('save').addEventListener('click', async () => {
@@ -39,6 +40,7 @@ $('save').addEventListener('click', async () => {
     thresholds: { hide, blur },
     enabled: { pending: $('enPending').checked, hide: $('enHide').checked, blur: $('enBlur').checked, flag: $('enFlag').checked },
     captureFixtures: $('capture').checked,
+    allowedCountries: $('allowed').value.split(',').map((c) => c.trim()).filter(Boolean),
   });
   status('saveStatus', 'Saved');
 });
@@ -101,6 +103,7 @@ async function stats() {
     ['Today hide / blur / show', `${u.decisions.hide} / ${u.decisions.blur} / ${u.decisions.show}`],
     ['Cached posts (all time)', await db.count('posts')],
     ['Labels', await db.count('labels')],
+    ['Countries cached', await db.count('countries')],
     ['Authors tracked / seeded', `${authors.length} / ${authors.filter((a) => a.seeded).length}`],
   ];
   const t = $('stats');

@@ -3,6 +3,7 @@ import { IdbStore, openRbf } from './db';
 import { Scorer } from './scorer';
 import { D1Client } from './scoring';
 import { DEFAULT_SETTINGS, QUESTIONS, loadSettings, loadUsage, recordUsage } from './settings';
+import type { AboutInfo } from './country';
 import type { LabelRecord, Post, Settings } from './types';
 
 let settings: Settings = DEFAULT_SETTINGS;
@@ -28,6 +29,7 @@ async function getScorer(): Promise<Scorer> {
     client: () => client,
     config: QUESTIONS,
     thresholds: () => settings.thresholds,
+    allowedCountries: () => settings.allowedCountries,
     budget: {
       canSpend: async () => (await loadUsage()).tokens < settings.dailyTokenBudget,
       record: recordUsage,
@@ -54,7 +56,8 @@ async function saveCapture(url: string, body: unknown) {
 type Msg =
   | { type: 'score'; post: Post }
   | { type: 'label'; label: Omit<LabelRecord, 'id' | 'at'> }
-  | { type: 'capture'; url: string; body: unknown };
+  | { type: 'capture'; url: string; body: unknown }
+  | { type: 'country'; handle: string; info: AboutInfo };
 
 chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
   (async () => {
@@ -64,6 +67,11 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
       case 'label': {
         const db = await ready;
         await db.add('labels', { ...msg.label, at: Date.now() });
+        return { ok: true };
+      }
+      case 'country': {
+        const db = await ready;
+        await new IdbStore(db).putCountry({ handle: msg.handle, ...msg.info, fetchedAt: Date.now() });
         return { ok: true };
       }
       case 'capture':

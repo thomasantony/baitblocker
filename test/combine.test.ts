@@ -5,14 +5,13 @@ import { QUESTIONS } from '../src/settings';
 const t = { hide: 0.85, blur: 0.4 };
 
 describe('combine', () => {
-  it('takes the max of the strong questions over the weighted sum', () => {
-    expect(combineScore({ slurs: 0.9, provocation: 1, engagement_bait: 1, fabricated: 1 }, QUESTIONS.combine)).toBeCloseTo(1);
-    expect(combineScore({ slurs: 0.95, provocation: 0.1 }, QUESTIONS.combine)).toBeCloseTo(0.95);
-    expect(combineScore({ outgroup_contempt: 0.2, provocation: 0.8, engagement_bait: 0.5, fabricated: 0.5 }, QUESTIONS.combine)).toBeCloseTo(0.65);
+  it('takes the max of the two topic questions', () => {
+    expect(combineScore({ us_politics: 0.9, ideology_bait: 0.3 }, QUESTIONS.combine)).toBeCloseTo(0.9);
+    expect(combineScore({ us_politics: 0.1, ideology_bait: 0.7 }, QUESTIONS.combine)).toBeCloseTo(0.7);
   });
 
-  it('lets anti-capitalist sloganeering decide on its own', () => {
-    expect(combine({ anticapitalist_slogans: 0.99, provocation: 0.2 }, QUESTIONS, t)).toMatchObject({ decision: 'hide', topQuestion: 'anticapitalist_slogans' });
+  it('a weighted sum still works for custom configs', () => {
+    expect(combineScore({ a: 0.5, b: 1 }, { max_of: [], weighted: { a: 0.4, b: 0.2 } })).toBeCloseTo(0.4);
   });
 
   it('treats missing probabilities as 0', () => {
@@ -27,6 +26,6 @@ describe('combine', () => {
   });
 
   it('reports the top question', () => {
-    expect(combine({ slurs: 0.1, provocation: 0.7 }, QUESTIONS, t)).toMatchObject({ topQuestion: 'provocation', decision: 'show' });
+    expect(combine({ us_politics: 0.1, ideology_bait: 0.5 }, QUESTIONS, t)).toMatchObject({ topQuestion: 'ideology_bait', decision: 'blur' });
   });
 });

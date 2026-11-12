@@ -3,7 +3,7 @@ import type { Store } from '../src/db';
 import { Scorer } from '../src/scorer';
 import { D1Client, type ScoringClient } from '../src/scoring';
 import { QUESTIONS } from '../src/settings';
-import type { AuthorRecord, LabelRecord, Post, PostRecord } from '../src/types';
+import type { AuthorRecord, CountryRecord, LabelRecord, Post, PostRecord } from '../src/types';
 
 class MemStore implements Store {
   posts = new Map<string, PostRecord>();
@@ -14,12 +14,20 @@ class MemStore implements Store {
   async getAuthor(h: string) { return this.authors.get(h); }
   async putAuthor(a: AuthorRecord) { this.authors.set(a.handle, { ...a }); }
   async addLabel(l: LabelRecord) { this.labels.push(l); }
+  countries = new Map<string, CountryRecord>();
+  async getCountry(h: string) { return this.countries.get(h); }
+  async putCountry(c: CountryRecord) { this.countries.set(c.handle, c); }
 }
+
+const based = (store: MemStore, handle: string, country?: string, fetchedAt = Date.now()) =>
+  store.countries.set(handle, { handle, country, fetchedAt });
 
 const post = (id: string, extra: Partial<Post> = {}): Post => ({ id, text: `post ${id}`, author: 'someone', isReply: false, ...extra });
 
-function setup(opts: { probs?: Record<string, number>; budgetLeft?: boolean; concurrency?: number } = {}) {
+function setup(opts: { probs?: Record<string, number>; budgetLeft?: boolean; concurrency?: number; country?: string | null } = {}) {
   const store = new MemStore();
+  // Most tests want the topic decision applied, so default the author to a non-US country.
+  if (opts.country !== null) based(store, 'someone', opts.country ?? 'South Asia');
   let active = 0;
   let maxActive = 0;
   const client: ScoringClient = {
@@ -28,7 +36,7 @@ function setup(opts: { probs?: Record<string, number>; budgetLeft?: boolean; con
       maxActive = Math.max(maxActive, active);
       await new Promise((r) => setTimeout(r, 5));
       active--;
-      return { probs: opts.probs ?? { slurs: 0.95 }, inputTokens: 100 };
+      return { probs: opts.probs ?? { us_politics: 0.95 }, inputTokens: 100 };
     }),
   };
   const budget = { canSpend: vi.fn(async () => opts.budgetLeft ?? true), record: vi.fn(async () => {}) };
@@ -48,8 +56,8 @@ describe('Scorer', () => {
   it('scores, stores, and updates the author Beta estimate', async () => {
     const { scorer, store, budget } = setup();
     const v = await scorer.decide(post('1'));
-    expect(v).toMatchObject({ decision: 'hide', reason: 'd1', topQuestion: 'slurs', author: 'someone' });
-    expect(store.posts.get('1')).toMatchObject({ decision: 'hide', probs: { slurs: 0.95 }, questionsVersion: QUESTIONS.version });
+    expect(v).toMatchObject({ decision: 'hide', reason: 'd1', topQuestion: 'us_politics', country: 'South Asia', author: 'someone' });
+    expect(store.posts.get('1')).toMatchObject({ decision: 'hide', probs: { us_politics: 0.95 }, questionsVersion: QUESTIONS.version });
     expect(store.authors.get('someone')).toMatchObject({ alpha: 1.95, postsSeen: 1 });
     expect(store.authors.get('someone')!.beta).toBeCloseTo(1.05);
     expect(budget.record).toHaveBeenCalledWith(100, 'hide');
@@ -94,6 +102,47 @@ describe('Scorer', () => {
     expect(store.labels.map((l) => [l.postId, l.source])).toEqual([['1', 'account_seed'], ['2', 'account_seed']]);
   });
 
+  it('asks for the author country when the topic fires and the country is unknown', async () => {
+    const { scorer } = setup({ country: null });
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'unscored', needsCountry: 'someone' });
+  });
+
+  it('re-asks after the country arrives, answering from cache', async () => {
+    const { scorer, store, client } = setup({ country: null });
+    await scorer.decide(post('1'));
+    based(store, 'someone', 'Kenya');
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'hide', reason: 'cache', country: 'Kenya' });
+    expect(client.score).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows on-topic posts from US-based authors', async () => {
+    const { scorer } = setup({ country: null });
+    await scorer.decide(post('1'));
+    const { scorer: s2, store } = setup({ country: 'United States' });
+    expect(await s2.decide(post('1'))).toMatchObject({ decision: 'show', reason: 'country' });
+    expect(store.posts.size).toBe(0);
+    void scorer;
+  });
+
+  it('skips d1 entirely for authors known to be US-based', async () => {
+    const { scorer, client } = setup({ country: 'United States' });
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'show', reason: 'country' });
+    expect(client.score).not.toHaveBeenCalled();
+  });
+
+  it('does not look up the country for off-topic posts', async () => {
+    const { scorer } = setup({ country: null, probs: { us_politics: 0.1, ideology_bait: 0.2 } });
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'show' });
+  });
+
+  it('shows on-topic posts when X has no country for the author, and re-looks up stale entries', async () => {
+    const { scorer, store } = setup({ country: null });
+    based(store, 'someone', undefined);
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'show' });
+    based(store, 'someone', 'Kenya', Date.now() - 40 * 24 * 3600_000);
+    expect(await scorer.decide(post('1'))).toMatchObject({ decision: 'unscored', needsCountry: 'someone' });
+  });
+
   it('degrades to unscored when d1 fails', async () => {
     const { scorer, client } = setup();
     vi.mocked(client.score).mockRejectedValueOnce(new Error('boom'));
@@ -108,13 +157,13 @@ describe('D1Client', () => {
     );
     const c = new D1Client('liquid_test', 'd1.1', fetchImpl as unknown as typeof fetch);
     const r = await c.score(post('1', { quotedText: 'q', quotedAuthor: 'x' }), QUESTIONS.questions);
-    expect(r).toEqual({ probs: { slurs: 0.7 }, inputTokens: 42 });
+    expect(r).toEqual({ probs: {}, inputTokens: 42 });
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.liquid.ai/decisions/v1/systemone');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer liquid_test');
     const body = JSON.parse(init.body as string);
     expect(body.state).toBe('post 1\n\n[Quoting @x]\nq');
     expect(Object.keys(body.questions)).toHaveLength(QUESTIONS.questions.length);
-    expect(body.questions.slurs.type).toBe('noul');
+    expect(body.questions.us_politics.type).toBe('noul');
   });
 });

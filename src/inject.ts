@@ -1,12 +1,57 @@
 // MAIN-world script: observes X's GraphQL timeline responses without altering them.
+import { CountryFetcher, DEFAULT_ABOUT_QUERY_ID, DEFAULT_BEARER, aboutQueryId } from './country';
 import { GraphQLTimelineParser, isTimelineUrl } from './parser';
 import { MSG_NS } from './types';
 
 const parser = new GraphQLTimelineParser();
 let capture = false;
 
+// ---------- account-country lookups (run here so they carry the user's X session) ----------
+
+const QID_KEY = 'rbf:aboutQueryId';
+let queryId = safeGet(QID_KEY) ?? DEFAULT_ABOUT_QUERY_ID;
+let bearer = DEFAULT_BEARER;
+
+function safeGet(k: string): string | undefined {
+  try {
+    return localStorage.getItem(k) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Learn the current AboutAccountQuery id and bearer from X's own requests. */
+function observeRequest(url: string, auth?: string | null) {
+  if (auth && /^Bearer /.test(auth)) bearer = auth;
+  const id = aboutQueryId(url);
+  if (id && id !== queryId) {
+    queryId = id;
+    try {
+      localStorage.setItem(QID_KEY, id);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+const fetcher = new CountryFetcher({
+  fetch: (...a) => origFetch(...a),
+  queryId: () => queryId,
+  headers: () => ({
+    authorization: bearer,
+    'x-csrf-token': /(?:^|; )ct0=([^;]+)/.exec(document.cookie)?.[1] ?? '',
+    'x-twitter-auth-type': 'OAuth2Session',
+    'x-twitter-active-user': 'yes',
+  }),
+});
+
 window.addEventListener('message', (e) => {
-  if (e.source === window && e.data?.ns === MSG_NS && e.data.type === 'config') capture = !!e.data.capture;
+  if (e.source !== window || e.data?.ns !== MSG_NS) return;
+  if (e.data.type === 'config') capture = !!e.data.capture;
+  else if (e.data.type === 'lookupCountry' && typeof e.data.handle === 'string') {
+    const handle: string = e.data.handle;
+    fetcher.lookup(handle).then((result) => window.postMessage({ ns: MSG_NS, type: 'countryResult', handle, result }, location.origin));
+  }
 });
 
 function handle(url: string, json: unknown) {
@@ -25,6 +70,8 @@ window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>)
   try {
     const input = args[0];
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const h = args[1]?.headers ?? (input instanceof Request ? input.headers : undefined);
+    observeRequest(url, h instanceof Headers ? h.get('authorization') : Array.isArray(h) ? undefined : (h as any)?.authorization);
     if (isTimelineUrl(url)) {
       res
         .clone()
@@ -40,6 +87,7 @@ window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>)
 const origOpen = XMLHttpRequest.prototype.open;
 XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL, ...rest: any[]) {
   const href = String(url);
+  observeRequest(href);
   if (isTimelineUrl(href)) {
     this.addEventListener('load', () => {
       try {
@@ -53,3 +101,9 @@ XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, 
   }
   return (origOpen as any).call(this, method, url, ...rest);
 } as typeof XMLHttpRequest.prototype.open;
+
+const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+XMLHttpRequest.prototype.setRequestHeader = function (this: XMLHttpRequest, name: string, value: string) {
+  if (name.toLowerCase() === 'authorization') observeRequest('', value);
+  return origSetHeader.call(this, name, value);
+};

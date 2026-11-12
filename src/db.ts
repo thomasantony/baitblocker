@@ -1,21 +1,25 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { AuthorRecord, LabelRecord, PostRecord } from './types';
+import type { AuthorRecord, CountryRecord, LabelRecord, PostRecord } from './types';
 
 interface RbfSchema extends DBSchema {
   posts: { key: string; value: PostRecord };
   labels: { key: number; value: LabelRecord; indexes: { postId: string } };
   authors: { key: string; value: AuthorRecord };
+  countries: { key: string; value: CountryRecord };
 }
 
 export type RbfDB = IDBPDatabase<RbfSchema>;
 
 export function openRbf(name = 'rbf'): Promise<RbfDB> {
-  return openDB<RbfSchema>(name, 1, {
-    upgrade(db) {
-      db.createObjectStore('posts', { keyPath: 'id' });
-      const labels = db.createObjectStore('labels', { keyPath: 'id', autoIncrement: true });
-      labels.createIndex('postId', 'postId');
-      db.createObjectStore('authors', { keyPath: 'handle' });
+  return openDB<RbfSchema>(name, 2, {
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        db.createObjectStore('posts', { keyPath: 'id' });
+        const labels = db.createObjectStore('labels', { keyPath: 'id', autoIncrement: true });
+        labels.createIndex('postId', 'postId');
+        db.createObjectStore('authors', { keyPath: 'handle' });
+      }
+      if (oldVersion < 2) db.createObjectStore('countries', { keyPath: 'handle' });
     },
   });
 }
@@ -33,6 +37,8 @@ export interface Store {
   getAuthor(handle: string): Promise<AuthorRecord | undefined>;
   putAuthor(a: AuthorRecord): Promise<void>;
   addLabel(l: LabelRecord): Promise<void>;
+  getCountry(handle: string): Promise<CountryRecord | undefined>;
+  putCountry(c: CountryRecord): Promise<void>;
 }
 
 export class IdbStore implements Store {
@@ -51,6 +57,12 @@ export class IdbStore implements Store {
   }
   async addLabel(l: LabelRecord) {
     await this.db.add('labels', l);
+  }
+  getCountry(handle: string) {
+    return this.db.get('countries', normHandle(handle));
+  }
+  async putCountry(c: CountryRecord) {
+    await this.db.put('countries', { ...c, handle: normHandle(c.handle) });
   }
 }
 

@@ -1,4 +1,5 @@
 import { combine } from './combine';
+import { isAllowed, isFresh } from './country';
 import { authorScore, newAuthor, normHandle, type Store } from './db';
 import type { ScoringClient } from './scoring';
 import type { Decision, Post, PostRecord, QuestionsConfig, Thresholds, Verdict } from './types';
@@ -15,6 +16,8 @@ export interface ScorerOptions {
   client: () => ScoringClient | undefined;
   config: QuestionsConfig;
   thresholds: () => Thresholds;
+  /** "Account based in" values that are never filtered. */
+  allowedCountries?: () => string[];
   budget: Budget;
   /** Max d1 requests in flight. d1 takes one post per request, so this is the "batch size". */
   concurrency?: number;
@@ -73,6 +76,12 @@ export class Scorer {
       return this.verdictFor(rec, 'seeded');
     }
 
+    // Authors already known to be based in an allowed country never need d1.
+    const country = post.author ? await this.o.store.getCountry(normHandle(post.author)) : undefined;
+    if (isFresh(country) && isAllowed(country.country, this.allowed())) {
+      return { postId: post.id, decision: 'show', reason: 'country', author: normHandle(post.author!), country: country.country };
+    }
+
     if (!this.o.client()) return { postId: post.id, decision: 'unscored', reason: 'no_key' };
     return new Promise<Verdict>((resolve) => {
       this.queue.push({ post, rescore: !!cached, resolve });
@@ -108,6 +117,10 @@ export class Scorer {
     await this.o.budget.record(inputTokens, c.decision);
     if (!rescore) await this.bumpAuthor(post.author, c.score);
     return this.verdictFor(rec, 'd1');
+  }
+
+  private allowed(): string[] {
+    return this.o.allowedCountries?.() ?? ['United States'];
   }
 
   private baseRecord(post: Post) {
@@ -146,7 +159,7 @@ export class Scorer {
     // Re-derive the decision from stored probabilities so threshold edits apply to cached posts.
     const c = rec.reason === 'seeded' ? undefined : combine(rec.probs, this.o.config, this.o.thresholds());
     const author = rec.author ? await this.o.store.getAuthor(rec.author) : undefined;
-    return {
+    const v: Verdict = {
       postId: rec.id,
       decision: c?.decision ?? rec.decision,
       score: c?.score ?? rec.score,
@@ -155,5 +168,14 @@ export class Scorer {
       authorScore: author ? authorScore(author) : undefined,
       reason,
     };
+    // The topic fired: only filter when the author is based outside the allowed countries.
+    if (c && v.decision !== 'show') {
+      if (!rec.author) return { ...v, decision: 'show' };
+      const country = await this.o.store.getCountry(rec.author);
+      if (!isFresh(country)) return { ...v, decision: 'unscored', needsCountry: rec.author };
+      v.country = country.country;
+      if (!country.country || isAllowed(country.country, this.allowed())) v.decision = 'show';
+    }
+    return v;
   }
 }
