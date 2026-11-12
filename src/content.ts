@@ -224,11 +224,11 @@ function metaText(v: Verdict): string {
   return parts.join(' · ');
 }
 
-/** One line of text plus a "show" link; clicks never reach the post underneath. */
-function bar(id: string, title: string, v: Verdict): HTMLElement {
+/** Why the post is filtered, plus a "show" link; clicks never reach the post underneath. */
+function bar(id: string, v: Verdict, title?: string): HTMLElement {
   const b = el('div', 'bb-bar');
   b.addEventListener('click', (e) => e.stopPropagation());
-  b.append(el('span', 'bb-meta', `${title} · ${metaText(v)}`));
+  b.append(el('span', 'bb-meta', title ? `${title} · ${metaText(v)}` : metaText(v)));
   const show = el('button', 'bb-show', 'show');
   show.type = 'button';
   show.addEventListener('click', (e) => {
@@ -282,13 +282,13 @@ function render(article: HTMLElement, id: string, w: Want) {
   clear(article);
   if (w.state !== 'show') article.dataset.bb = w.state;
   // The bar sits above the post so it never covers the text; hovering a blurred post peeks.
-  if (w.state === 'hide' && w.v) article.prepend(bar(id, 'Hidden', w.v));
-  else if (w.state === 'blur' && w.v) article.prepend(bar(id, 'Blurred', w.v));
+  if (w.state === 'hide' && w.v) article.prepend(bar(id, w.v, 'Hidden'));
+  else if (w.state === 'blur' && w.v) article.prepend(bar(id, w.v));
   const box = w.quote && w.quote.state !== 'show' ? quoteBox(article) : undefined;
   if (box && w.quote) {
     box.dataset.bbq = w.quote.state;
     if (w.quote.state === 'blur' && w.quote.v) {
-      const qb = bar(w.quote.id, 'Quoted post blurred', w.quote.v);
+      const qb = bar(w.quote.id, w.quote.v);
       qb.classList.add('bb-qbar');
       box.before(qb);
     }
@@ -338,8 +338,8 @@ article[data-bb="blur"]:hover > :not(.bb-bar) { filter: none; transition-delay: 
 [data-bbq="blur"] { filter: blur(10px); pointer-events: none; user-select: none; }
 .bb-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: rgb(113,118,123); }
 .bb-bar.bb-qbar { padding: 6px 0; }
-.bb-meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bb-show { font: inherit; cursor: pointer; border: 0; background: transparent; color: rgb(29,155,240); padding: 0 0 0 4px; }
+.bb-meta { flex: 1; min-width: 0; }
+.bb-show { flex: none; align-self: flex-start; font: inherit; cursor: pointer; border: 0; background: transparent; color: rgb(29,155,240); padding: 0 0 0 4px; }
 .bb-show:hover { text-decoration: underline; }
 `;
 
